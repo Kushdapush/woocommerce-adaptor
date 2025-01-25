@@ -1,13 +1,21 @@
-const express = require('express');
+require('dotenv').config();
+const express = require("express");
+const bodyParser = require("body-parser");
+const searchRoutes = require("./routes/searchRoutes");
+const logger = require("./utils/logger");
+
 const app = express();
-const port = process.env.PORT || 8080;
 
-app.use(express.json());
+app.use(bodyParser.json());
 
-app.get('/', (req, res) => {
-    res.send('Hello, World!');
+app.use("/search", searchRoutes);
+
+app.use((err, req, res, next) => {
+  logger.error(err.message, { stack: err.stack });
+  res
+    .status(err.status || 500)
+    .json({ error: err.message || "Internal Server Error" });
 });
 
-app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-});
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => logger.info(`Server is running on port ${PORT}`));
