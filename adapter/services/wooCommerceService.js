@@ -1,30 +1,19 @@
 const axios = require("axios");
-const { WOO_BASE_URL, WOO_CONSUMER_KEY, WOO_CONSUMER_SECRET } = require("../utils/config");
+const {
+  WOO_BASE_URL,
+  WOO_CONSUMER_KEY,
+  WOO_CONSUMER_SECRET,
+} = require("../utils/config");
 
-const searchByItem = async (intent) => {
+const searchByCity = async ({ category, city }) => {
   const queryParams = new URLSearchParams({
     consumer_key: WOO_CONSUMER_KEY,
     consumer_secret: WOO_CONSUMER_SECRET,
-    search: intent.item.descriptor.name,
+    city: city,
+    category: category.id,
   });
   const url = `${WOO_BASE_URL}/products?${queryParams.toString()}`;
   return fetchProducts(url);
-};
-
-const searchByCityAndCategory = async (intent) => {
-  const queryParams = new URLSearchParams({
-    consumer_key: WOO_CONSUMER_KEY,
-    consumer_secret: WOO_CONSUMER_SECRET,
-    city: intent.city,
-    category: intent.category.id,
-  });
-  const url = `${WOO_BASE_URL}/products?${queryParams.toString()}`;
-  return fetchProducts(url);
-};
-
-const generateDownloadableCatalog = async (intent) => {
-  const catalogUrl = `${WOO_BASE_URL}/download/catalog.zip`;
-  return catalogUrl;
 };
 
 const fetchProducts = async (url) => {
@@ -38,6 +27,6 @@ const fetchProducts = async (url) => {
 
 module.exports = {
   searchByItem,
-  searchByCityAndCategory,
+  searchByCity,
   generateDownloadableCatalog,
 };

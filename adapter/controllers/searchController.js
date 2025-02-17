@@ -1,14 +1,18 @@
 const wooCommerceService = require("../services/wooCommerceService");
 const catalogModel = require("../models/catalougeModel");
-const handleError = require('../utils/errorHandler');
+const handleError = require("../utils/errorHandler");
 
 const handleSearchRequest = async (req, res) => {
   const { context, message } = req.body;
   const intent = message.intent;
+  const city = context.city;
 
   try {
-    if (intent.category?.id && intent.city) {
-      const products = await wooCommerceService.searchByCityAndCategory(intent);
+    if (intent.category?.id && city) {
+      const products = await wooCommerceService.searchByCity({
+        category: intent.category,
+        city: city,
+      });
       const catalog = catalogModel.mapToONDC(products);
       return res.status(200).json(createResponse(context, catalog));
     } else {
@@ -26,19 +30,6 @@ const createResponse = (context, catalog) => ({
     timestamp: new Date().toISOString(),
   },
   message: { catalog },
-});
-
-const createLinkResponse = (context, link) => ({
-  context: {
-    ...context,
-    action: "on_search",
-    timestamp: new Date().toISOString(),
-  },
-  message: {
-    catalog: {
-      downloadable_link: link,
-    },
-  },
 });
 
 module.exports = { handleSearchRequest };
