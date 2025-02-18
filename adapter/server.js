@@ -1,7 +1,10 @@
-require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
+require('dotenv').config();
+
+const selectRoutes = require("./routes/selectRoutes");
 const searchRoutes = require("./routes/searchRoutes");
+
 const logger = require("./utils/logger");
 
 const app = express();
@@ -9,6 +12,7 @@ const app = express();
 app.use(bodyParser.json());
 
 app.use("/search", searchRoutes);
+app.use("/select", selectRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.message, { stack: err.stack });
