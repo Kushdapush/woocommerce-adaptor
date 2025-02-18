@@ -1,4 +1,4 @@
-const wooCommerceService = require("../services/wooCommerceService");
+const searchService = require("../services/searchService");
 const catalogModel = require("../models/catalougeModel");
 const handleError = require("../utils/errorHandler");
 
@@ -9,7 +9,7 @@ const handleSearchRequest = async (req, res) => {
 
   try {
     if (intent.category?.id && city) {
-      const products = await wooCommerceService.searchByCity({
+      const products = await searchService.searchByCity({
         category: intent.category,
         city: city,
       });
