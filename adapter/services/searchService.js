@@ -1,4 +1,4 @@
-const axios = require("axios");
+const { fetchProducts } = require("../utils/fetchProducts");
 const {
   WOO_BASE_URL,
   WOO_CONSUMER_KEY,
@@ -16,17 +16,6 @@ const searchByCity = async ({ category, city }) => {
   return fetchProducts(url);
 };
 
-const fetchProducts = async (url) => {
-  try {
-    const response = await axios.get(url);
-    return response.data;
-  } catch (error) {
-    throw new Error("Error fetching products from WooCommerce");
-  }
-};
-
 module.exports = {
-  searchByItem,
   searchByCity,
-  generateDownloadableCatalog,
 };
