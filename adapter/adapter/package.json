@@ -1,20 +1,35 @@
 {
-  "name": "adapter",
+  "name": "ondc-woocommerce-connector",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "ONDC to WooCommerce connector",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "test": "jest"
   },
-  "keywords": [],
+  "keywords": [
+    "ondc",
+    "woocommerce",
+    "ecommerce",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.7.9",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "helmet": "^8.0.0",
-    "winston": "^3.17.0"
+    "@woocommerce/woocommerce-rest-api": "^1.0.1",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "morgan": "^1.10.0",
+    "winston": "^3.10.0"
+  },
+  "devDependencies": {
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.3"
   }
 }
