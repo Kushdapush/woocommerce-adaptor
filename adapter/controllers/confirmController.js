@@ -4,7 +4,29 @@ const handleConfirmRequest = async (req,res) => {
     try{
         const {body} = req;
         logger.info("Received request to confirm");
-        res.status(200).json({message: "Confirmed"});
+        const ackResponse = {
+            context: {
+                ...body.context,
+                timestamp: new Date().toISOString()
+            },
+            message: {
+                ack: {
+                    status: "ACK"
+                }
+            }
+        };
+        res.status(200).json(ackResponse);
+        logger.info("Confirm request successful");
+
+        try{
+
+        } catch (error){
+            logger.error("Confirm request failed", {
+                transactionId: body.context.transactionId,
+                error: error.message
+            });
+            handleError(error, res);
+        }
 
     } catch(error){
         logger.error(error.message, {stack: error.stack});
