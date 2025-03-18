@@ -46,3 +46,9 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
+// Add this to the imports
+const onInitRoutes = require('./routes/onInitRoutes');
+
+// Add this to the route mounting section
+app.use('/api/v1/on_init', onInitRoutes); // Mount on_init routes
