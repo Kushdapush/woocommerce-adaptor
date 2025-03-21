@@ -11,7 +11,11 @@ const { errorHandler } = require('./utils/errorHandler');
 // Import routes
 const searchRoutes = require('./routes/searchRoutes');
 const selectRoutes = require('./routes/selectRoutes');
-const initRoutes = require('./routes/initRoutes'); // Add init routes
+const initRoutes = require('./routes/initRoutes');
+const onInitRoutes = require('./routes/onInitRoutes');
+const confirmRoutes = require('./routes/confirmRoutes');
+const onConfirmRoutes = require('./routes/onConfirmRoutes');
+const productRoutes = require('./routes/productRoutes');
 
 // Initialize Express app
 const app = express();
@@ -26,7 +30,11 @@ app.use(morgan('combined', { stream: { write: message => logger.info(message.tri
 // API routes
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/select', selectRoutes);
-app.use('/api/v1/init', initRoutes); // Mount init routes
+app.use('/api/v1/init', initRoutes);
+app.use('/api/v1/on_init', onInitRoutes);
+app.use('/api/v1/confirm', confirmRoutes);
+app.use('/api/v1/on_confirm', onConfirmRoutes);
+app.use('/api/v1/products', productRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -36,19 +44,18 @@ app.get('/health', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-const productRoutes = require('./routes/productRoutes');
-app.use('/api/v1/products', productRoutes);
-
 // Start the server
 const PORT = config.server.port || 3000;
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
+  logger.info(`ONDC Connector initialized with endpoints:`);
+  logger.info(`- /api/v1/search`);
+  logger.info(`- /api/v1/select`);
+  logger.info(`- /api/v1/init`);
+  logger.info(`- /api/v1/on_init`);
+  logger.info(`- /api/v1/confirm`);
+  logger.info(`- /api/v1/on_confirm`);
+  logger.info(`- /api/v1/products`);
 });
 
 module.exports = app;
-
-// Add this to the imports
-const onInitRoutes = require('./routes/onInitRoutes');
-
-// Add this to the route mounting section
-app.use('/api/v1/on_init', onInitRoutes); // Mount on_init routes

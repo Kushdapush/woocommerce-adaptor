@@ -17,9 +17,28 @@ module.exports = {
     participantId: process.env.ONDC_PARTICIPANT_ID,
     bppId: process.env.ONDC_BPP_ID,
     bppUri: process.env.ONDC_BPP_URI,
-    registryUrl: process.env.ONDC_REGISTRY_URL,
-    gatewayUrl: process.env.ONDC_GATEWAY_URL,
     callbackRetryCount: parseInt(process.env.ONDC_CALLBACK_RETRY_COUNT || '3'),
-    callbackRetryInterval: parseInt(process.env.ONDC_CALLBACK_RETRY_INTERVAL || '10000') // 10 seconds
+    callbackRetryDelay: parseInt(process.env.ONDC_CALLBACK_RETRY_DELAY || '5000')
+  },
+  store: {
+    name: process.env.STORE_NAME || 'WooCommerce Store',
+    gps: process.env.STORE_GPS || '12.956399,77.636803',
+    locality: process.env.STORE_LOCALITY || 'Main Street',
+    city: process.env.STORE_CITY || 'Bengaluru',
+    areaCode: process.env.STORE_AREA_CODE || '560076',
+    state: process.env.STORE_STATE || 'Karnataka',
+    phone: process.env.STORE_PHONE || '9999999999',
+    email: process.env.STORE_EMAIL || 'store@example.com',
+    jurisdiction: process.env.STORE_JURISDICTION || 'Bengaluru',
+    gstNumber: process.env.STORE_GST_NUMBER || 'GST_NUMBER',
+    panNumber: process.env.STORE_PAN_NUMBER || 'PAN_NUMBER'
+  },
+  settlement: {
+    beneficiaryName: process.env.SETTLEMENT_BENEFICIARY_NAME || 'Store',
+    upiAddress: process.env.SETTLEMENT_UPI_ADDRESS || 'store@upi',
+    accountNo: process.env.SETTLEMENT_ACCOUNT_NO || 'XXXXXXXXXX',
+    ifscCode: process.env.SETTLEMENT_IFSC_CODE || 'XXXXXXXXX',
+    bankName: process.env.SETTLEMENT_BANK_NAME || 'Bank Name',
+    branchName: process.env.SETTLEMENT_BRANCH_NAME || 'Branch Name'
   }
 };
