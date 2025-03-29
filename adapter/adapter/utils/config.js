@@ -2,7 +2,9 @@ require('dotenv').config();
 
 module.exports = {
   server: {
-    port: process.env.PORT || 3000
+    port: process.env.PORT || 3000,
+    bodyLimit: process.env.BODY_LIMIT || '1mb',
+    enableAuthentication: process.env.ENABLE_AUTH !== 'false' // Enable auth by default
   },
   woocommerce: {
     url: process.env.WOO_BASE_URL,
@@ -13,12 +15,25 @@ module.exports = {
   },
   ondc: {
     authToken: process.env.ONDC_AUTH_TOKEN,
-    subscriptionId: process.env.ONDC_SUBSCRIPTION_ID,
+    subscriberId: process.env.ONDC_SUBSCRIPTION_ID,
     participantId: process.env.ONDC_PARTICIPANT_ID,
     bppId: process.env.ONDC_BPP_ID,
     bppUri: process.env.ONDC_BPP_URI,
     callbackRetryCount: parseInt(process.env.ONDC_CALLBACK_RETRY_COUNT || '3'),
-    callbackRetryDelay: parseInt(process.env.ONDC_CALLBACK_RETRY_DELAY || '5000')
+    callbackRetryDelay: parseInt(process.env.ONDC_CALLBACK_RETRY_DELAY || '5000'),
+    
+    // ONDC Registry configuration
+    registryUrl: process.env.ONDC_REGISTRY_URL || 'https://registry.ondc.org',
+    domain: process.env.ONDC_DOMAIN || 'ONDC:RET10',
+    country: process.env.ONDC_COUNTRY || 'IND',
+    city: process.env.ONDC_CITY || 'std:080',
+    
+    // Signing configuration
+    signingPrivateKey: process.env.ONDC_SIGNING_PRIVATE_KEY,
+    signingPublicKey: process.env.ONDC_SIGNING_PUBLIC_KEY,
+    encryptionPrivateKey: process.env.ONDC_ENCRYPTION_PRIVATE_KEY,
+    encryptionPublicKey: process.env.ONDC_ENCRYPTION_PUBLIC_KEY,
+    ukId: process.env.ONDC_UK_ID || 'UKID1'
   },
   store: {
     name: process.env.STORE_NAME || 'WooCommerce Store',

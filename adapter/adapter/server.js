@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const config = require('./utils/config');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./utils/errorHandler');
+const { verifyAuthentication } = require('./auth/authMiddleware');
 
 // Import routes
 const searchRoutes = require('./routes/searchRoutes');
@@ -20,12 +21,53 @@ const productRoutes = require('./routes/productRoutes');
 // Initialize Express app
 const app = express();
 
-// Apply middlewares
+// Apply security middleware
 app.use(helmet());
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
-app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
+
+// Custom middleware to capture raw body for signature verification
+app.use((req, res, next) => {
+  let rawBody = '';
+  
+  // Skip for non-JSON requests
+  if (req.headers['content-type'] !== 'application/json') {
+    return next();
+  }
+  
+  req.on('data', (chunk) => {
+    rawBody += chunk.toString();
+  });
+  
+  req.on('end', () => {
+    req.rawBody = rawBody;
+    next();
+  });
+});
+
+// Apply standard middleware
+app.use(bodyParser.json({ 
+  limit: config.server.bodyLimit,
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+app.use(bodyParser.urlencoded({ 
+  extended: true, 
+  limit: config.server.bodyLimit 
+}));
+app.use(morgan('combined', { 
+  stream: { 
+    write: message => logger.info(message.trim()) 
+  } 
+}));
+
+// Apply authentication middleware if enabled
+if (config.server.enableAuthentication) {
+  app.use(verifyAuthentication);
+  logger.info('ONDC Authentication middleware enabled');
+} else {
+  logger.warn('ONDC Authentication middleware is DISABLED - not recommended for production');
+}
 
 // API routes
 app.use('/api/v1/search', searchRoutes);
