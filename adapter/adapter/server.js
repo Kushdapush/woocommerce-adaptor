@@ -17,6 +17,8 @@ const onInitRoutes = require('./routes/onInitRoutes');
 const confirmRoutes = require('./routes/confirmRoutes');
 const onConfirmRoutes = require('./routes/onConfirmRoutes');
 const productRoutes = require('./routes/productRoutes');
+const cancelRoutes = require('./routes/cancelRoutes');
+const onCancelRoutes = require('./routes/onCancelRoutes');
 
 // Initialize Express app
 const app = express();
@@ -77,6 +79,8 @@ app.use('/api/v1/on_init', onInitRoutes);
 app.use('/api/v1/confirm', confirmRoutes);
 app.use('/api/v1/on_confirm', onConfirmRoutes);
 app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/cancel', cancelRoutes);
+app.use('/api/v1/on_cancel', onCancelRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -98,6 +102,8 @@ app.listen(PORT, () => {
   logger.info(`- /api/v1/confirm`);
   logger.info(`- /api/v1/on_confirm`);
   logger.info(`- /api/v1/products`);
+  logger.info(`- /api/v1/cancel`);
+  logger.info(`- /api/v1/on_cancel`);
 });
 
 module.exports = app;
