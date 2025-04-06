@@ -143,6 +143,26 @@ const getOrders = async (params = {}) => {
   }
 };
 
+/**
+ * Get product categories from WooCommerce
+ * @param {Object} params - Query parameters
+ * @returns {Promise<Array>} Array of WooCommerce product categories
+ */
+const getCategories = async (params = {}) => {
+  try {
+    logger.info('Fetching product categories from WooCommerce', { params });
+    const response = await wooCommerce.get('products/categories', params);
+    logger.info('Successfully fetched product categories', { count: response.data.length });
+    return response.data;
+  } catch (error) {
+    logger.error('Error fetching product categories from WooCommerce', { 
+      error: error.message,
+      params 
+    });
+    throw error;
+  }
+};
+
 module.exports = {
   getProducts,
   getProductById,
@@ -153,3 +173,4 @@ module.exports = {
   getCategories,
   getOrders  
 };
+

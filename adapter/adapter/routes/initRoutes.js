@@ -1,8 +1,8 @@
-const express = require("express");
+const express = require('express');
+const { processInitRequest } = require('../controllers/initController');
+
 const router = express.Router();
-const initController = require("../controllers/initController");
 
-
-router.post("/", initController.processInitRequest);
+router.post('/', processInitRequest);
 
 module.exports = router;

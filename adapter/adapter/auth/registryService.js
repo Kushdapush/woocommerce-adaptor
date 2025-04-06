@@ -28,27 +28,27 @@ const lookupSubscriber = async (subscriberId, ukId) => {
     }
     
     // If not in cache, lookup from registry
-    logger.info('Looking up subscriber in registry', { subscriberId, ukId });
+    logger.info('Looking up subscriber in registdry', { subscriberId, ukId });
     
-    const response = await axios.post(`${config.ondc.registryUrl}/lookup`, {
-      subscriber_id: subscriberId,
-      ukId: ukId,
-      // Optional filters if needed:
-      domain: config.ondc.domain,
-      country: config.ondc.country,
-      city: "std:080", // This can be made dynamic based on your requirements
-      type: "BPP" // Adjust based on your use case (BPP/BAP)
-    }, {
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      timeout: 5000 // 5 seconds timeout
-    });
+    // const response = await axios.post(`${config.ondc.registryUrl}/lookup`, {
+    //   subscriber_id: subscriberId,
+    //   ukId: ukId,
+    //   // Optional filters if needed:
+    //   domain: config.ondc.domain,
+    //   country: config.ondc.country,
+    //   city: "std:080", // This can be made dynamic based on your requirements
+    //   type: "BPP" // Adjust based on your use case (BPP/BAP)
+    // }, {
+    //   headers: {
+    //     'Content-Type': 'application/json'
+    //   },
+    //   timeout: 5000 // 5 seconds timeout
+    // });
     
-    if (response.status !== 200 || !response.data || !Array.isArray(response.data) || response.data.length === 0) {
-      logger.warn('Subscriber not found in registry', { subscriberId, ukId });
-      return null;
-    }
+    // if (response.status !== 200 || !response.data || !Array.isArray(response.data) || response.data.length === 0) {
+    //   logger.warn('Subscriber not found in registry', { subscriberId, ukId });
+    //   return null;
+    // }
     
     // Find the entry with matching ukId
     const subscriberData = response.data.find(entry => entry.ukId === ukId);
@@ -67,7 +67,7 @@ const lookupSubscriber = async (subscriberId, ukId) => {
       subscriberId, 
       ukId, 
       error: error.message,
-      response: error.response?.data
+      // response: error.response?.data
     });
     
     // In case of errors, it's safer to fail the authentication

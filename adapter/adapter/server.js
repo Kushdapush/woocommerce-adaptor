@@ -27,33 +27,32 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 
-// Custom middleware to capture raw body for signature verification
-app.use((req, res, next) => {
-  let rawBody = '';
-  
-  // Skip for non-JSON requests
-  if (req.headers['content-type'] !== 'application/json') {
-    return next();
-  }
-  
-  req.on('data', (chunk) => {
-    rawBody += chunk.toString();
-  });
-  
-  req.on('end', () => {
-    req.rawBody = rawBody;
-    next();
-  });
-});
-
-// Apply standard middleware
-app.use(bodyParser.json({ 
-  limit: config.server.bodyLimit,
+// Single body parsing middleware with raw body capture
+app.use(express.json({
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();
-  }
+  },
+  limit: config.server.bodyLimit
 }));
-app.use(bodyParser.urlencoded({ 
+
+// Add error handling for JSON parsing
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    logger.error('JSON Parse Error', { 
+      error: err.message,
+      body: req.rawBody
+    });
+    return res.status(400).json({ 
+      error: {
+        message: 'Invalid JSON payload',
+        details: err.message
+      }
+    });
+  }
+  next();
+});
+
+app.use(express.urlencoded({ 
   extended: true, 
   limit: config.server.bodyLimit 
 }));
@@ -88,11 +87,24 @@ app.get('/health', (req, res) => {
 });
 
 // Error handling middleware
-app.use(errorHandler);
+app.use((err, req, res, next) => {
+  logger.error('Request processing error', {
+    error: err.message,
+    stack: err.stack,
+    body: req.rawBody
+  });
+
+  res.status(500).json({
+    error: {
+      message: 'Internal Server Error',
+      details: err.message || 'Unable to process the request'
+    }
+  });
+});
 
 // Start the server
 const PORT = config.server.port || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`ONDC Connector initialized with endpoints:`);
   logger.info(`- /api/v1/search`);
@@ -104,6 +116,15 @@ app.listen(PORT, () => {
   logger.info(`- /api/v1/products`);
   logger.info(`- /api/v1/cancel`);
   logger.info(`- /api/v1/on_cancel`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Shutting down gracefully');
+  server.close(() => {
+    logger.info('Process terminated');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
