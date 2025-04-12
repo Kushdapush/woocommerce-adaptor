@@ -25,6 +25,36 @@ const getProducts = async (params = {}) => {
     throw error;
   }
 };
+const testConnection = async () => {
+  try {
+    logger.info('Testing WooCommerce API connection...');
+    // First try to ping the WordPress site root
+    const rootUrl = config.woocommerce.url;
+    
+    // Log the API configuration (excluding sensitive info)
+    logger.info('WooCommerce API Configuration', {
+      url: config.woocommerce.url,
+      version: config.woocommerce.version,
+      timeout: config.woocommerce.timeout
+    });
+    
+    // Test with a simple API call that should always work if WC is set up
+    const response = await wooCommerce.get('');
+    logger.info('WooCommerce API connection successful', {
+      status: response.status,
+      namespaces: response.data?.namespaces || []
+    });
+    return true;
+  } catch (error) {
+    logger.error('WooCommerce API connection test failed', {
+      error: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url
+    });
+    return false;
+  }
+};
 
 /**
  * Get product by ID from WooCommerce
@@ -69,13 +99,50 @@ const getProductVariations = async (productId) => {
  */
 const createOrder = async (orderData) => {
   try {
-    logger.info('Creating order in WooCommerce', { orderData: { ...orderData, line_items: 'Redacted for logging' } });
+    // Log the request URL for debugging
+    const requestUrl = `${config.woocommerce.url}/wp-json/wc/v3/orders`;
+    logger.info('Creating order in WooCommerce', { 
+      service: 'ondc-woocommerce-connector',
+      requestUrl,
+      orderDataKeys: Object.keys(orderData)
+    });
+    
+    // Make the API call
     const response = await wooCommerce.post('orders', orderData);
-    return response.data;
+    
+    // Log response structure for debugging
+    logger.info('WooCommerce API response structure', {
+      service: 'ondc-woocommerce-connector',
+      responseType: typeof response,
+      hasData: response?.data ? 'yes' : 'no',
+      status: response?.status,
+      dataKeys: response?.data ? Object.keys(response.data) : []
+    });
+    
+    logger.info('Successfully created order in WooCommerce', {
+      service: 'ondc-woocommerce-connector',
+      status: response?.status,
+      orderId: response?.data?.id || 'unknown'
+    });
+    
+    // If for some reason we're getting back a raw response without .data property
+    // Make sure we return in a consistent format
+    if (response && !response.data && response.id) {
+      // Response is already the data object
+      return response;
+    }
+    
+    // Return either response.data or the whole response object
+    return response;
   } catch (error) {
     logger.error('Error creating order in WooCommerce', { 
+      service: 'ondc-woocommerce-connector',
       error: error.message,
-      orderData: { ...orderData, line_items: 'Redacted for logging' }
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseData: error.response?.data
     });
     throw error;
   }
@@ -171,6 +238,7 @@ module.exports = {
   updateOrder,
   getOrder,
   getCategories,
-  getOrders  
+  getOrders,
+  testConnection
 };
 

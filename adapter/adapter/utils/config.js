@@ -4,13 +4,14 @@ module.exports = {
   server: {
     port: process.env.PORT || 3000,
     bodyLimit: process.env.BODY_LIMIT || '1mb',
-    enableAuthentication: process.env.ENABLE_AUTH !== 'false' // Enable auth by default
+    enableAuthentication: process.env.NODE_ENV === 'production'  // Only enable in production
   },
   woocommerce: {
-    url: process.env.WOO_BASE_URL,
+    url: 'http://localhost/wordpress1',
+    // url: process.env.WOO_BASE_URL,
     consumerKey: process.env.WOO_CONSUMER_KEY,
     consumerSecret: process.env.WOO_CONSUMER_SECRET,
-    version: process.env.WOO_API_VERSION || 'wc/v3',
+    version: process.env.WOO_API_VERSION || 'v3',
     timeout: parseInt(process.env.WOO_API_TIMEOUT || '30000')
   },
   ondc: {

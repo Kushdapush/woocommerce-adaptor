@@ -47,7 +47,7 @@ const processInit = async (request) => {
       }
     });
     
-    const wooOrder = await wooCommerceAPI.createOrder(wooOrderData);
+    const wooOrder = await createWooCommerceOrder(wooOrderData);
     
     logger.info('Successfully created WooCommerce order', {
       transactionId: context.transaction_id,
@@ -320,12 +320,31 @@ const mapLineItems = (ondcItems) => {
       // Add fulfillment_id as meta data
       meta_data.push({
         key: 'ondc_fulfillment_id',
-        value: mainItem.fulfillment_id
+        value: mainItem.fulfillment_id || 'F1'
       });
+      
+      // Add original ONDC item ID as meta data
+      meta_data.push({
+        key: 'ondc_item_id',
+        value: mainItem.id
+      });
+      
+      // Extract WooCommerce product ID from ONDC item ID
+      let productId = 0;
+      if (mainItem.id.startsWith('I')) {
+        productId = parseInt(mainItem.id.slice(1), 10);
+      } else {
+        productId = parseInt(mainItem.id, 10);
+      }
+      
+      if (isNaN(productId)) {
+        logger.warn('Invalid product ID format', { itemId: mainItem.id });
+        productId = 1; // Fallback to a default product
+      }
       
       // Return the line item object
       return {
-        product_id: mapOndcProductIdToWooId(mainItem.id),
+        product_id: productId,
         quantity: mainItem.quantity.count,
         meta_data
       };
@@ -944,6 +963,88 @@ const mapWooProductIdToOndcId = (wooProductId, lineItemId) => {
 return `I${wooProductId}`;
 };
 
+/**
+ * Create WooCommerce order
+ * @param {Object} orderData - WooCommerce order data
+ * @returns {Promise<Object>} Created WooCommerce order
+ */
+// Fix for createWooCommerceOrder function in initService.js
+// The current issue is with response handling after successfully creating the order
+
+const createWooCommerceOrder = async (orderData) => {
+  try {
+    // This is successfully creating the order
+    const response = await wooCommerceAPI.createOrder(orderData);
+    
+    // Improved response validation and error handling
+    logger.info('WooCommerce API response received', { 
+      service: 'ondc-woocommerce-connector',
+      status: response?.status || 'unknown',
+      hasData: response?.data ? 'yes' : 'no',
+      responseType: typeof response,
+      dataKeys: response?.data ? Object.keys(response.data) : []
+    });
+    
+    // Check what we're getting in the response
+    if (!response) {
+      throw new ApiError('Empty response from WooCommerce API', 500);
+    }
+    
+    // If response is direct data instead of {data: ...} format
+    if (response && typeof response === 'object' && response.id && !response.data) {
+      // WooCommerce API client might be returning data directly rather than in .data property
+      logger.info('WooCommerce API returned direct data object', {
+        service: 'ondc-woocommerce-connector',
+        orderId: response.id
+      });
+      
+      return response; // Return direct data
+    }
+    
+    // For normal {data: ...} format
+    if (!response.data) {
+      throw new ApiError('Invalid response from WooCommerce API: No data property', 500);
+    }
+
+    logger.info('Order created successfully', { 
+      service: 'ondc-woocommerce-connector',
+      orderId: response.data.id 
+    });
+    
+    return response.data;
+  } catch (error) {
+    // Log detailed error information
+    logger.error('Detailed WooCommerce API error', {
+      service: 'ondc-woocommerce-connector',
+      status: error.response?.status || 500,
+      statusText: error.response?.statusText || 'Unknown error',
+      data: error.response?.data || {},
+      url: error.config?.url,
+      errorMessage: error.message,
+      stack: error.stack
+    });
+
+    // Handle different types of errors
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      throw new ApiError(
+        `WooCommerce API error: ${error.response.status} - ${error.response.statusText || 'Unknown error'}`,
+        error.response.status
+      );
+    } else if (error.request) {
+      // The request was made but no response was received
+      throw new ApiError('Network error: No response from WooCommerce API', 503);
+    } else if (error instanceof ApiError) {
+      // Forward existing ApiError
+      throw error;
+    } else {
+      // Something happened in setting up the request
+      throw new ApiError(`WooCommerce API error: ${error.message || 'Unknown error'}`, 500);
+    }
+  }
+};
+
+
 module.exports = {
-processInit
+  processInit
 };

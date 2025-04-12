@@ -11,6 +11,11 @@ const { ApiError } = require('../utils/errorHandler');
  */
 const verifyAuthentication = async (req, res, next) => {
   try {
+    // For local testing, allow requests without auth
+    if (process.env.NODE_ENV === 'development' || process.env.BYPASS_AUTH === 'true') {
+      return next();
+    }
+
     // Skip auth for health check and internal endpoints
     if (req.path === '/health' || req.path.startsWith('/internal/')) {
       return next();

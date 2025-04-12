@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-
+const wooCommerceAPI = require('./utils/wooCommerceAPI');
 const config = require('./utils/config');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./utils/errorHandler');
@@ -70,6 +70,22 @@ if (config.server.enableAuthentication) {
   logger.warn('ONDC Authentication middleware is DISABLED - not recommended for production');
 }
 
+// Test WooCommerce connection on startup
+(async function testWooCommerceConnection() {
+  try {
+    const isConnected = await wooCommerceAPI.testConnection();
+    if (isConnected) {
+      logger.info('WooCommerce API connection verified successfully');
+    } else {
+      logger.error('WooCommerce API connection failed. Application may not function correctly.');
+    }
+  } catch (error) {
+    logger.error('Error testing WooCommerce connection', {
+      error: error.message,
+      stack: error.stack
+    });
+  }
+})();
 // API routes
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/select', selectRoutes);
