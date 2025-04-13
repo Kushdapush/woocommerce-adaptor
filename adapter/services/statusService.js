@@ -3,7 +3,7 @@ const path = require('path');
 const { makeRequest } = require("../utils/networkHandler");
 const logger = require("../utils/logger");
 
-// Gets order status
+// Gets order status from sample JSON data
 const getOrderFromWooCommerce = async (orderId) => {
   try {
     const mappedOrderId = orderId.replace(/^O/, ''); // Remove 'O' prefix if present
@@ -15,11 +15,9 @@ const getOrderFromWooCommerce = async (orderId) => {
     const rawData = await fs.readFile(filePath, 'utf8');
     const orderData = JSON.parse(rawData);
     
-    // Replace this with actual API call to WooCommerce in PROD
-    // something like: 
-    // const orderData = await wooCommerceAPI.getOrder(mappedOrderId);
-    // For now, we are just returning the sample data.
-    logger.debug(`WooCommerce order data retrieved: ${JSON.stringify(orderData)}`);
+    // In a real implementation, we would check if the ID matches
+    // For this sample, we'll just use the sample data regardless of the ID
+    logger.debug(`WooCommerce order data retrieved for ID ${mappedOrderId}`);
     return orderData;
   } catch (error) {
     logger.error(`Failed to fetch order from sample data: ${error.message}`, {
@@ -31,7 +29,7 @@ const getOrderFromWooCommerce = async (orderId) => {
   }
 };
 
-// Maps WooCommerce order status to ONDC order state
+/// Maps WooCommerce order status to ONDC order state 
 const mapOrderState = (wooStatus) => {
   const stateMapping = {
     'pending': 'Created',
@@ -47,7 +45,7 @@ const mapOrderState = (wooStatus) => {
   return stateMapping[wooStatus] || 'Created';
 };
 
-// Maps WooCommerce order status to ONDC fulfillment state
+// Maps WooCommerce order status to ONDC fulfillment state 
 const mapFulfillmentState = (wooStatus) => {
   const fulfillmentState = {
     'pending': 'Pending',
@@ -150,8 +148,8 @@ const transformOrderToONDC = (wooOrder) => {
     state: mapOrderState(wooOrder.status),
     ...(cancellation && { cancellation }),
     provider: {
-      id: process.env.PROVIDER_ID || "P1",
-      locations: [{ id: process.env.LOCATION_ID || "L1" }]
+      id: "P1", // Hardcoded for sample
+      locations: [{ id: "L1" }]
     },
     items: items,
     billing: {
@@ -173,7 +171,7 @@ const transformOrderToONDC = (wooOrder) => {
     fulfillments: [
       {
         id: "F1",
-        "@ondc/org/provider_name": process.env.STORE_NAME || "WooCommerce Store",
+        "@ondc/org/provider_name": "WooCommerce Store", // Hardcoded for sample
         "type": "Delivery",
         "tracking": false, // No tracking info in sample data
         "@ondc/org/TAT": "PT60M", // Default TAT (1 hour)
@@ -185,14 +183,14 @@ const transformOrderToONDC = (wooOrder) => {
         "start": {
           "location": {
             "descriptor": {
-              "name": process.env.STORE_NAME || "WooCommerce Store"
+              "name": "WooCommerce Store"
             },
-            "gps": process.env.STORE_GPS || "12.967555,77.749666",
+            "gps": "12.967555,77.749666", // Hardcoded for sample
             "address": {
-              "locality": process.env.STORE_LOCALITY || "Locality",
-              "city": process.env.STORE_CITY || "City",
-              "area_code": process.env.STORE_PINCODE || "560001",
-              "state": process.env.STORE_STATE || "State"
+              "locality": "Locality",
+              "city": "City",
+              "area_code": "560001",
+              "state": "State"
             }
           }
         },
@@ -239,15 +237,9 @@ const transformOrderToONDC = (wooOrder) => {
   };
 };
 
-// Sends on_status response to BAP
-const sendOnStatusResponse = async (context, message) => {
+// For local testing: Get the on_status response without sending it to BAP
+const getLocalOnStatusResponse = async (context, message) => {
   try {
-    // Extract BAP URI
-    const bapUri = context.bap_uri;
-    if (!bapUri) {
-      throw new Error("BAP URI not found in context");
-    }
-
     // Extract order ID from request
     const orderId = message.order_id;
     if (!orderId) {
@@ -261,7 +253,7 @@ const sendOnStatusResponse = async (context, message) => {
     const ondcOrder = transformOrderToONDC(wooOrder);
 
     // Create on_status response
-    const onStatusResponse = {
+    return {
       context: {
         domain: context.domain || "ONDC:RET10",
         country: context.country || "IND",
@@ -270,8 +262,8 @@ const sendOnStatusResponse = async (context, message) => {
         core_version: context.core_version || "1.2.0",
         bap_id: context.bap_id,
         bap_uri: context.bap_uri,
-        bpp_id: process.env.BPP_ID || "sellerNP.com",
-        bpp_uri: process.env.BPP_URI || "https://sellerNP.com/ondc",
+        bpp_id: "sellerNP.com", // Hardcoded for sample
+        bpp_uri: "https://sellerNP.com/ondc", // Hardcoded for sample
         transaction_id: context.transaction_id,
         message_id: context.message_id,
         timestamp: new Date().toISOString()
@@ -280,25 +272,39 @@ const sendOnStatusResponse = async (context, message) => {
         order: ondcOrder
       }
     };
+  } catch (error) {
+    logger.error(`Error in getLocalOnStatusResponse: ${error.message}`, {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
+};
+
+// Sends on_status response to BAP
+const sendOnStatusResponse = async (context, message) => {
+  try {
+    // Extract BAP URI
+    const bapUri = context.bap_uri;
+    if (!bapUri) {
+      throw new Error("BAP URI not found in context");
+    }
+
+    // Get the response payload
+    const onStatusResponse = await getLocalOnStatusResponse(context, message);
 
     // Send on_status response
-    // For local testing
-    const onStatusUrl = "localhost:8080/on_status"; 
-    // Comment the above line and Uncomment the below line for production
-    // const onStatusUrl = `${bapUri}/on_status`;
-
+    const onStatusUrl = `${bapUri}/on_status`;
+    
     logger.info(`Sending on_status response to ${onStatusUrl}`, { 
       transactionId: context.transaction_id,
-      orderId: ondcOrder.id
+      orderId: message.order_id
     });
     
-    // For local development/testing, you can log the response instead of sending it
-    logger.debug(`on_status response payload: ${JSON.stringify(onStatusResponse)}`);
-    
-    // Comment this out if you just want to log the response without sending it
+    // UNCOMMENT FOR PRODUCTION: Send the actual request
     // await makeRequest('POST', onStatusUrl, onStatusResponse);
     
-    logger.info(`Successfully sent on_status response for order ${orderId}`, {
+    logger.info(`Successfully sent on_status response for order ${message.order_id}`, {
       transactionId: context.transaction_id
     });
     
@@ -315,5 +321,6 @@ const sendOnStatusResponse = async (context, message) => {
 module.exports = {
   sendOnStatusResponse,
   getOrderFromWooCommerce,
-  transformOrderToONDC
+  transformOrderToONDC,
+  getLocalOnStatusResponse
 };

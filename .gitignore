@@ -3,3 +3,6 @@ node_modules
 *.log
 .env
 sample.txt
+Data
+flow.txt
+schemas.json

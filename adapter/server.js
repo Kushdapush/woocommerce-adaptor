@@ -4,7 +4,8 @@ require('dotenv').config();
 
 const selectRoutes = require("./routes/selectRoutes");
 const searchRoutes = require("./routes/searchRoutes");
-const confirmRoutes = require("./routes/confirmRoutes");
+const statusRoutes = require("./routes/statusRoutes");
+//const confirmRoutes = require("./routes/confirmRoutes");
 
 const logger = require("./utils/logger");
 
@@ -14,7 +15,8 @@ app.use(bodyParser.json());
 
 app.use("/search", searchRoutes);
 app.use("/select", selectRoutes);
-app.use("/confirm", confirmRoutes);
+app.use("/status", statusRoutes);
+// app.use("/confirm", confirmRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.message, { stack: err.stack });
