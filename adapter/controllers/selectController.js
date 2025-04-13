@@ -1,15 +1,16 @@
-const selectProducts = require("../services/selectService");
+const selectService = require("../services/selectService");
 const handleError = require("../utils/errorHandler");
 const logger = require("../utils/logger");
 
 const handleSelectRequest = async (req, res) => {
   const { context, message } = req.body;
   const order = message.order;
-  const orderId = order.id;
-  const transactionId = context.transactionId;
+  const transactionId = context.transaction_id;
 
   try {
-    logger.info("Select request received", { orderId });
+    logger.info("Select request received", { transactionId });
+    
+    // Send acknowledgment response
     const ackResponse = {
       context: {
         ...context,
@@ -22,24 +23,27 @@ const handleSelectRequest = async (req, res) => {
       },
     };
     res.status(200).json(ackResponse);
-    logger.info("Select request successful", { transactionId });
+    
+    logger.info("Select acknowledgment sent", { transactionId });
 
+    // Process select request asynchronously
     try {
-      const selectProducts = await selectService.selectProducts(order);
-
-      const response = {};
-
+      // Send on_select response to BAP
+      await selectService.sendOnSelectResponse(context, message);
+      
+      logger.info("On_select response sent successfully", { transactionId });
     } catch (error) {
-      logger.error("Select request failed", {
+      logger.error("Error processing select request", {
         transactionId,
         error: error.message,
+        stack: error.stack
       });
-      handleError(error, res);
     }
   } catch (error) {
-    logger.error("Select request failed", {
+    logger.error("Error handling select request", {
       transactionId,
       error: error.message,
+      stack: error.stack
     });
     handleError(error, res);
   }
@@ -48,8 +52,3 @@ const handleSelectRequest = async (req, res) => {
 module.exports = {
   handleSelectRequest,
 };
-
-/*
-The role of /on_select is to provide the entire breakup of all the prices including item, delivery, packaging etc. This is done after checking the availability and serviceability of the product.
- 
-*/

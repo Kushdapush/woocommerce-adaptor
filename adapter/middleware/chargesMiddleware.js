@@ -1,127 +1,149 @@
 const logger = require('../utils/logger');
-const config = require('../utils/config');
-const axios = require('axios');
 
 /**
- * Middleware to calculate delivery and packing charges
+ * Calculate delivery charges based on distance and item characteristics
+ * @param {Object} fulfillment - Fulfillment information with delivery location
+ * @param {Array} items - Order items
+ * @param {Object} context - Request context
+ * @returns {Promise<Object>} - Delivery charges
  */
-const chargesMiddleware = {
-  /**
-   * Calculate delivery charges based on distance, weight, and other parameters
-   * 
-   * @param {Object} fulfillment - Fulfillment information
-   * @param {Array} items - Order items
-   * @param {Object} context - Request context
-   * @returns {Object} - Delivery charge details
-   */
-  calculateDeliveryCharges: async (fulfillment, items, context) => {
-    logger.info(`Calculating delivery charges for transaction ${context.transaction_id}`);
-
-    try {
-      // Extract location information
-      const deliveryLocation = fulfillment.end?.location;
-      const pickupLocation = fulfillment.start?.location;
-      
-      if (!deliveryLocation || !pickupLocation) {
-        logger.warn('Missing location information for delivery charge calculation');
-        return {
-          value: config.DEFAULT_DELIVERY_CHARGE.toString(),
-          currency: "INR"
-        };
+const calculateDeliveryCharges = async (fulfillment, items, context) => {
+  try {
+    const transactionId = context?.transaction_id || 'unknown';
+    logger.info(`Calculating delivery charges for transaction ${transactionId}`);
+    
+    // Check if we have location information
+    const location = fulfillment?.end?.location;
+    if (!location || (!location.gps && !location.address)) {
+      logger.warn("Missing location information for delivery charge calculation");
+      // Return default delivery charge
+      return {
+        currency: "INR",
+        value: "40.00" // Default delivery charge
+      };
+    }
+    
+    // Extract GPS coordinates or use address to determine distance
+    let distance = 5; // Default distance in km
+    
+    if (location.gps) {
+      // In a real implementation, you'd calculate distance from store to delivery location
+      // Here we just extract the coordinates for demonstration
+      try {
+        const [lat, lng] = location.gps.split(',').map(coord => parseFloat(coord.trim()));
+        // Use coordinates to calculate distance (simplified for demo)
+        distance = Math.abs(lat) + Math.abs(lng) / 10; // Just a dummy calculation
+      } catch (error) {
+        logger.warn(`Could not parse GPS coordinates: ${error.message}`);
       }
-
-      // Calculate estimated weight of the order
-      const totalWeight = items.reduce((sum, item) => {
-        // In a real implementation, get weight from product details
-        const itemWeight = 0.5; // Default weight in kg
-        return sum + (itemWeight * (item.quantity?.count || 1));
-      }, 0);
-
-      // For a real implementation, you might call a logistics API here
-      // Example:
-      /*
-      const logisticsResponse = await axios.post(config.LOGISTICS_API_URL, {
-        pickup: pickupLocation,
-        dropoff: deliveryLocation,
-        weight: totalWeight,
-        dimensions: { length: 10, width: 10, height: 10 }, // Default dimensions
-        type: fulfillment.type
-      });
-      
-      return {
-        value: logisticsResponse.data.charge.toString(),
-        currency: "INR"
-      };
-      */
-
-      // For now, calculate a mock delivery charge based on a base fee plus weight
-      const baseFee = 30;
-      const perKgCharge = 10;
-      const deliveryCharge = Math.round(baseFee + (totalWeight * perKgCharge));
-
-      return {
-        value: deliveryCharge.toString(),
-        currency: "INR"
-      };
-    } catch (error) {
-      logger.error(`Error calculating delivery charges: ${error.message}`, {
-        transactionId: context.transaction_id,
-        error: error.stack
-      });
-      
-      // Return default charge in case of error
-      return {
-        value: config.DEFAULT_DELIVERY_CHARGE.toString(),
-        currency: "INR"
-      };
+    } else if (location.address) {
+      // Use address to determine distance (simplified for demo)
+      const pincode = location.address.area_code;
+      if (pincode) {
+        // Use the last two digits of pincode for a dummy distance calculation
+        try {
+          const lastTwoDigits = pincode.toString().slice(-2);
+          distance = parseInt(lastTwoDigits, 10) / 10 + 3;
+        } catch (error) {
+          logger.warn(`Error processing pincode: ${error.message}`);
+        }
+      }
     }
-  },
-
-  /**
-   * Calculate packing charges based on item type, quantity, etc.
-   * 
-   * @param {Array} items - Order items
-   * @param {Object} context - Request context
-   * @returns {Object} - Packing charge details
-   */
-  calculatePackingCharges: async (items, context) => {
-    logger.info(`Calculating packing charges for transaction ${context.transaction_id}`);
-
-    try {
-      // For a real implementation, you might determine packing charges based on:
-      // 1. Number of items
-      // 2. Item categories (some may need special packaging)
-      // 3. Fragility
-      // 4. Special handling requirements
-      
-      // Simple calculation based on number of items and a base fee
-      const itemCount = items.reduce((count, item) => count + (item.quantity?.count || 1), 0);
-      const baseFee = 10;
-      const perItemFee = 5;
-      
-      const packingCharge = Math.round(baseFee + (itemCount * perItemFee));
-      
-      // Cap the packing charge at a reasonable maximum
-      const maxPackingCharge = 50;
-      const finalPackingCharge = Math.min(packingCharge, maxPackingCharge);
-
-      return {
-        value: finalPackingCharge.toString(),
-        currency: "INR"
-      };
-    } catch (error) {
-      logger.error(`Error calculating packing charges: ${error.message}`, {
-        transactionId: context.transaction_id,
-        error: error.stack
-      });
-      
-      // Return default charge in case of error
-      return {
-        value: config.DEFAULT_PACKING_CHARGE.toString(),
-        currency: "INR"
-      };
+    
+    // Calculate base charge
+    let baseCharge = 30; // Base delivery charge in INR
+    
+    // Add distance-based charge (₹10 per km after first 3 km)
+    const distanceCharge = Math.max(0, distance - 3) * 10;
+    
+    // Add weight-based charge if items are heavy
+    let weightCharge = 0;
+    let totalWeight = 0;
+    
+    items.forEach(item => {
+      const product = item.product;
+      const weight = parseFloat(product?.weight || 0);
+      const quantity = item.quantity?.count || 1;
+      totalWeight += weight * quantity;
+    });
+    
+    if (totalWeight > 5) {
+      weightCharge = 20; // Extra charge for heavy items
     }
+    
+    // Calculate total delivery charge
+    const totalCharge = baseCharge + distanceCharge + weightCharge;
+    
+    return {
+      currency: "INR",
+      value: totalCharge.toFixed(2)
+    };
+  } catch (error) {
+    logger.error(`Error calculating delivery charges: ${error.message}`, {
+      error: error.stack
+    });
+    // Return default charge in case of errors
+    return {
+      currency: "INR",
+      value: "50.00" // Default charge for error cases
+    };
   }
 };
 
-module.exports = chargesMiddleware;
+/**
+ * Calculate packing charges based on items
+ * @param {Array} items - Order items
+ * @param {Object} context - Request context
+ * @returns {Promise<Object>} - Packing charges
+ */
+const calculatePackingCharges = async (items, context) => {
+  try {
+    // Base packing charge
+    let baseCharge = 10; // Base packing charge in INR
+    
+    // Additional charge based on number of items
+    const itemCount = items.reduce((total, item) => {
+      return total + (item.quantity?.count || 1);
+    }, 0);
+    
+    const additionalCharge = Math.max(0, itemCount - 1) * 5; // ₹5 for each additional item
+    
+    // Special packaging requirements based on item categories
+    let specialPackagingCharge = 0;
+    items.forEach(item => {
+      const product = item.product;
+      if (product?.categories) {
+        // Special packaging for fragile items or electronics
+        const needsSpecialPackaging = product.categories.some(category => 
+          ['electronics', 'fragile', 'glass'].includes(category.slug.toLowerCase())
+        );
+        
+        if (needsSpecialPackaging) {
+          specialPackagingCharge += 15; // Additional charge for special packaging
+        }
+      }
+    });
+    
+    // Calculate total packing charge
+    const totalCharge = baseCharge + additionalCharge + specialPackagingCharge;
+    
+    return {
+      currency: "INR",
+      value: totalCharge.toFixed(2)
+    };
+  } catch (error) {
+    logger.error(`Error calculating packing charges: ${error.message}`, {
+      error: error.stack
+    });
+    // Return default charge in case of errors
+    return {
+      currency: "INR",
+      value: "10.00" // Default charge for error cases
+    };
+  }
+};
+
+module.exports = {
+  calculateDeliveryCharges,
+  calculatePackingCharges
+};
