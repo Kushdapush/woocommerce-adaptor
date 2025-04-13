@@ -23,14 +23,25 @@ const handleSearchRequest = async (req, res) => {
     res.status(200).json(ackResponse);
     
     try {
-      await sendOnSearchResponse(context, message);
-      logger.info("Search response sent to BAP", { transactionId: context.transaction_id });
+      console.log("\n===== PROCESSING SEARCH REQUEST =====");
+      console.log(`Transaction ID: ${context.transaction_id}`);
+      console.log(`BAP URI: ${context.bap_uri}`);
+      if (message.intent) {
+        console.log(`Search Category: ${message.intent.category?.id || 'All Categories'}`);
+      }
+      
+      const onSearchResponse = await sendOnSearchResponse(context, message);
+      
+      logger.info("Search response processed (not sent to BAP)", { 
+        transactionId: context.transaction_id 
+      });
     } catch (error) {
-      logger.error("Failed to send search response to BAP", { 
+      logger.error("Failed to process search response", { 
         transactionId: context.transaction_id,
         error: error.message,
         stack: error.stack
       });
+      console.error("Error processing search:", error.message);
     }
   } catch (error) {
     handleError(res, error, "Error processing /search request");
