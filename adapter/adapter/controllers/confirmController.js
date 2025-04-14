@@ -79,13 +79,29 @@ const processConfirmAsync = async (request) => {
   const transactionId = context.transaction_id;
   
   try {
-    logger.info('Starting async processing of confirm request', { transactionId });
-    
-    // Process the confirm request
-    const ondcResponse = await confirmService.processConfirm(request);
-    
-    logger.info('Successfully processed confirm request, sending on_confirm callback', { 
+    // Add request validation timestamp
+    const startTime = Date.now();
+    logger.info('Starting async processing of confirm request', { 
       transactionId,
+      startTime 
+    });
+    
+    // Add timeout handling
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Confirm processing timeout')), 30000);
+    });
+
+    // Process with timeout
+    const ondcResponse = await Promise.race([
+      confirmService.processConfirm(request),
+      timeoutPromise
+    ]);
+
+    // Add performance metrics
+    const processingTime = Date.now() - startTime;
+    logger.info('Successfully processed confirm request', { 
+      transactionId,
+      processingTime,
       ondcOrderId: ondcResponse.message.order.id
     });
     
@@ -97,8 +113,14 @@ const processConfirmAsync = async (request) => {
       callbackSuccess: callbackResult
     });
   } catch (error) {
+    // Add error categorization
+    const errorType = error.message.includes('timeout') ? 'TIMEOUT' : 
+                     error.message.includes('validation') ? 'VALIDATION' : 
+                     'PROCESSING';
+    
     logger.error('Error in async processing of confirm request', {
       transactionId,
+      errorType,
       error: error.message,
       stack: error.stack
     });

@@ -58,7 +58,7 @@ async function testConfirm() {
               "location": {
                 "address": {
                   "name": "Home",
-                  "building": "123 Test Building",
+                  "building": "12355 Test Building",
                   "locality": "Test Locality",
                   "city": "Bangalore",
                   "state": "Karnataka",

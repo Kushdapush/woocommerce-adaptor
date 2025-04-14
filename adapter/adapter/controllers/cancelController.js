@@ -79,34 +79,48 @@ const processCancelAsync = async (request) => {
   const transactionId = context.transaction_id;
   const orderId = request.message.order_id;
   const cancellationReasonId = request.message.cancellation_reason_id;
-  const fulfillmentId = request.message.descriptor.short_desc;
+  const fulfillmentId = request.message.descriptor?.short_desc || orderId;
+
+  // Add retry mechanism for validation
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
   
   try {
     logger.info('Starting async processing of cancel request', { 
       transactionId, 
       orderId,
       cancellationReasonId,
-      fulfillmentId
-    });
-    
-    // Validate the cancellation
-    const validationResult = await cancelService.validateCancellation(
-      orderId, 
-      cancellationReasonId, 
       fulfillmentId,
-      context
-    );
-    
+      attempt: retryCount + 1
+    });
+
+    let validationResult;
+    while (retryCount < MAX_RETRIES) {
+      validationResult = await cancelService.validateCancellation(
+        orderId, 
+        cancellationReasonId, 
+        fulfillmentId,
+        context
+      );
+
+      if (validationResult.valid || validationResult.finalFailure) {
+        break;
+      }
+
+      retryCount++;
+      await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+    }
+
+    // Add more detailed validation failure logging
     if (!validationResult.valid) {
       logger.warn('Cancellation validation failed', {
         transactionId,
         orderId,
-        reason: validationResult.reason
+        reason: validationResult.reason,
+        retryAttempts: retryCount,
+        errorCode: validationResult.errorCode,
+        isFinal: validationResult.finalFailure
       });
-      
-      // For validation failures like invalid reason code or no TAT breach,
-      // we don't need to send a callback as the ACK was already sent.
-      // The BAP should be aware of the validation error from validationResult.errorCode.
       return;
     }
     
@@ -132,12 +146,18 @@ const processCancelAsync = async (request) => {
       callbackSuccess: callbackResult
     });
   } catch (error) {
-    logger.error('Error in async processing of cancel request', {
+    // Add more error context
+    const errorContext = {
       transactionId,
       orderId,
+      retryAttempts: retryCount,
+      errorType: error.name,
+      errorCode: error.code,
       error: error.message,
       stack: error.stack
-    });
+    };
+    
+    logger.error('Error in async processing of cancel request', errorContext);
   }
 };
 
