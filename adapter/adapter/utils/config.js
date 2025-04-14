@@ -7,8 +7,8 @@ module.exports = {
     enableAuthentication: process.env.NODE_ENV === 'production'  // Only enable in production
   },
   woocommerce: {
-    url: 'http://localhost/wordpress1',
-    // url: process.env.WOO_BASE_URL,
+    // url: 'http://localhost/wordpress2',
+    url: process.env.WOO_BASE_URL,
     consumerKey: process.env.WOO_CONSUMER_KEY,
     consumerSecret: process.env.WOO_CONSUMER_SECRET,
     version: process.env.WOO_API_VERSION || 'v3',
