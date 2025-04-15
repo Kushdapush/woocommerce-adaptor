@@ -1,10 +1,11 @@
+// adapter/adapter/auth/registryService.js
 const axios = require('axios');
 const logger = require('../utils/logger');
 const config = require('../utils/config');
 const NodeCache = require('node-cache');
+const ondcCryptoSdk = require('./ondcCryptoSdk');
 
 // Create a cache for registry data with TTL of 1 hour
-// This reduces load on the registry and improves performance
 const registryCache = new NodeCache({ 
   stdTTL: 3600, // Cache TTL in seconds (1 hour)
   checkperiod: 600 // Check for expired keys every 10 minutes
@@ -28,27 +29,52 @@ const lookupSubscriber = async (subscriberId, ukId) => {
     }
     
     // If not in cache, lookup from registry
-    logger.info('Looking up subscriber in registdry', { subscriberId, ukId });
+    logger.info('Looking up subscriber in registry', { subscriberId, ukId });
     
-    // const response = await axios.post(`${config.ondc.registryUrl}/lookup`, {
-    //   subscriber_id: subscriberId,
-    //   ukId: ukId,
-    //   // Optional filters if needed:
-    //   domain: config.ondc.domain,
-    //   country: config.ondc.country,
-    //   city: "std:080", // This can be made dynamic based on your requirements
-    //   type: "BPP" // Adjust based on your use case (BPP/BAP)
-    // }, {
-    //   headers: {
-    //     'Content-Type': 'application/json'
-    //   },
-    //   timeout: 5000 // 5 seconds timeout
-    // });
+    // Prepare lookup request payload
+    const lookupPayload = {
+      subscriber_id: subscriberId,
+      ukId: ukId,
+      domain: config.ondc.domain,
+      country: config.ondc.country,
+      city: config.ondc.city,
+      type: config.ondc.type || "BPP" // Adjust based on your use case (BPP/BAP)
+    };
     
-    // if (response.status !== 200 || !response.data || !Array.isArray(response.data) || response.data.length === 0) {
-    //   logger.warn('Subscriber not found in registry', { subscriberId, ukId });
-    //   return null;
-    // }
+    // If we have a signing private key, create signature for lookup
+    if (config.ondc.signingPrivateKey) {
+      try {
+        const signature = await ondcCryptoSdk.createLookupSignature({
+          params: lookupPayload,
+          privateKey: config.ondc.signingPrivateKey
+        });
+        
+        // Add signature to payload
+        lookupPayload.signature = signature;
+      } catch (signError) {
+        logger.warn('Could not sign lookup request', { 
+          error: signError.message,
+          subscriberId,
+          ukId
+        });
+        // Continue without signature for now
+      }
+    }
+    
+    // Use the staging registry URL if provided in config, or fallback to default
+    const registryUrl = config.ondc.registryUrl || 'https://staging.registry.ondc.org';
+    
+    const response = await axios.post(`${registryUrl}/lookup`, lookupPayload, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000 // 5 seconds timeout
+    });
+    
+    if (response.status !== 200 || !response.data || !Array.isArray(response.data) || response.data.length === 0) {
+      logger.warn('Subscriber not found in registry', { subscriberId, ukId });
+      return null;
+    }
     
     // Find the entry with matching ukId
     const subscriberData = response.data.find(entry => entry.ukId === ukId);
@@ -67,8 +93,21 @@ const lookupSubscriber = async (subscriberId, ukId) => {
       subscriberId, 
       ukId, 
       error: error.message,
-      // response: error.response?.data
+      response: error.response?.data
     });
+    
+    // For development mode, return a mock subscriber if authentication is bypassed
+    if (process.env.BYPASS_AUTH === 'true' || process.env.NODE_ENV === 'development') {
+      logger.warn('Returning mock subscriber data in development mode', { subscriberId, ukId });
+      return {
+        subscriber_id: subscriberId,
+        ukId: ukId,
+        signing_public_key: config.ondc.signingPublicKey || 'mock-public-key',
+        encryption_public_key: config.ondc.encryptionPublicKey || 'mock-encryption-key',
+        valid_from: new Date().toISOString(),
+        valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // Valid for a year
+      };
+    }
     
     // In case of errors, it's safer to fail the authentication
     return null;
@@ -77,7 +116,6 @@ const lookupSubscriber = async (subscriberId, ukId) => {
 
 /**
  * Verify lookup against the registry using vLookup endpoint
- * This is a more secure option that signs the request
  * @param {string} subscriberId - Target subscriber ID to look up
  * @returns {Promise<Object|null>} Subscriber details or null if not found
  */
@@ -87,22 +125,40 @@ const verifyLookup = async (subscriberId) => {
     
     // Prepare the vLookup request
     const vLookupRequest = {
-      sender_subscriber_id: config.ondc.subscriberId,
+      sender_subscriber_id: config.ondc.subscriberId || config.ondc.subscriptionId,
       request_id: `req-${Date.now()}`,
       timestamp: timestamp,
       search_parameters: {
         domain: config.ondc.domain,
         subscriber_id: subscriberId,
         country: config.ondc.country,
-        type: "BPP", // Adjust based on your use case
-        city: "std:080" // This can be made dynamic
+        type: config.ondc.type || "BPP",
+        city: config.ondc.city
       }
     };
     
-    // In a production implementation, you would sign this request with your private key
-    // vLookupRequest.signature = signRequest(vLookupRequest, privateKey);
+    // Sign the request with ONDC crypto SDK if private key is available
+    if (config.ondc.signingPrivateKey) {
+      try {
+        const signature = await ondcCryptoSdk.createLookupSignature({
+          params: vLookupRequest,
+          privateKey: config.ondc.signingPrivateKey
+        });
+        
+        vLookupRequest.signature = signature;
+      } catch (signError) {
+        logger.warn('Could not sign vLookup request', { 
+          error: signError.message,
+          subscriberId
+        });
+        // Continue without signature for now
+      }
+    }
     
-    const response = await axios.post(`${config.ondc.registryUrl}/vlookup`, vLookupRequest, {
+    // Use the staging registry URL if provided in config, or fallback to default
+    const registryUrl = config.ondc.registryUrl || 'https://staging.registry.ondc.org';
+    
+    const response = await axios.post(`${registryUrl}/vlookup`, vLookupRequest, {
       headers: {
         'Content-Type': 'application/json'
       },
@@ -121,6 +177,16 @@ const verifyLookup = async (subscriberId) => {
       error: error.message,
       response: error.response?.data
     });
+    
+    // For development mode, return a mock subscriber if authentication is bypassed
+    if (process.env.BYPASS_AUTH === 'true' || process.env.NODE_ENV === 'development') {
+      logger.warn('Returning mock subscriber data in development mode', { subscriberId });
+      return {
+        subscriber_id: subscriberId,
+        signing_public_key: config.ondc.signingPublicKey || 'mock-public-key',
+        encryption_public_key: config.ondc.encryptionPublicKey || 'mock-encryption-key'
+      };
+    }
     
     return null;
   }

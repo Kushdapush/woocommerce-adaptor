@@ -1,3 +1,4 @@
+// adapter/adapter/auth/authRequestClient.js
 const axios = require('axios');
 const signatureGenerator = require('./signatureGenerator');
 const logger = require('../utils/logger');
@@ -13,7 +14,7 @@ const config = require('../utils/config');
 const makeAuthenticatedRequest = async (url, payload, options = {}) => {
   try {
     // Sign the request payload
-    const { authHeader } = signatureGenerator.signRequest(payload);
+    const { authHeader } = await signatureGenerator.signRequest(payload);
     
     // Merge default headers with options
     const headers = {

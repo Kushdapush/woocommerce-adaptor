@@ -1,6 +1,8 @@
-const signatureVerifier = require('./signatureVerifier');
+// adapter/adapter/auth/authMiddleware.js
 const registryService = require('./registryService');
+const ondcCryptoSdk = require('./ondcCryptoSdk');
 const logger = require('../utils/logger');
+const config = require('../utils/config');
 const { ApiError } = require('../utils/errorHandler');
 
 /**
@@ -11,8 +13,14 @@ const { ApiError } = require('../utils/errorHandler');
  */
 const verifyAuthentication = async (req, res, next) => {
   try {
-    // For local testing, allow requests without auth
-    if (process.env.NODE_ENV === 'development' || process.env.BYPASS_AUTH === 'true') {
+    // For local testing or development, allow requests without auth if configured
+    if (process.env.NODE_ENV === 'development' || process.env.BYPASS_AUTH === 'true' || !config.server.enableAuthentication) {
+      logger.debug('Authentication bypassed due to environment settings', { 
+        path: req.path,
+        bypassAuth: process.env.BYPASS_AUTH,
+        nodeEnv: process.env.NODE_ENV,
+        enableAuth: config.server.enableAuthentication
+      });
       return next();
     }
 
@@ -21,24 +29,113 @@ const verifyAuthentication = async (req, res, next) => {
       return next();
     }
 
+    // Check Authorization header
     const authHeader = req.headers.authorization;
+    // Check X-Gateway-Authorization header (if request comes from gateway)
+    const gatewayAuthHeader = req.headers['x-gateway-authorization'];
     
-    // Check if Authorization header exists
-    if (!authHeader) {
-      logger.warn('Missing authorization header', { path: req.path });
-      throw new ApiError('Missing authorization header', 401);
+    // At least one header should be present
+    if (!authHeader && !gatewayAuthHeader) {
+      logger.warn('Missing authorization headers', { path: req.path });
+      throw new ApiError('Missing authorization headers', 401);
     }
 
-    // Parse the authorization header
-    // Expected format: Signature keyId="subscriber_id|unique_key_id|algorithm",algorithm="algorithm",created="timestamp",expires="timestamp",headers="headers",signature="signature"
-    const authComponents = parseAuthHeader(authHeader);
+    // Get the raw body from the request
+    const body = req.rawBody || JSON.stringify(req.body);
     
-    if (!authComponents) {
-      logger.warn('Invalid authorization header format', { path: req.path });
-      throw new ApiError('Invalid authorization header format', 401);
-    }
+    // Process Authorization header (if present)
+    if (authHeader) {
+      const authComponents = parseAuthHeader(authHeader);
+      
+      if (!authComponents) {
+        logger.warn('Invalid authorization header format', { path: req.path });
+        throw new ApiError('Invalid authorization header format', 401);
+      }
 
-    const { subscriberId, ukId, algorithm, signature, digest } = authComponents;
+      const { subscriberId, ukId, algorithm } = authComponents;
+      
+      // Lookup subscriber in registry to get their public key
+      const subscriber = await registryService.lookupSubscriber(subscriberId, ukId);
+      
+      if (!subscriber || !subscriber.signing_public_key) {
+        logger.warn('Subscriber not found in registry or missing public key', { 
+          subscriberId, 
+          ukId,
+          path: req.path
+        });
+        throw new ApiError('Subscriber not found or missing public key', 401);
+      }
+      
+      // Verify the Authorization header
+      const isValid = await ondcCryptoSdk.isHeaderValid({
+        body,
+        header: authHeader,
+        publicKey: subscriber.signing_public_key
+      });
+      
+      if (!isValid) {
+        logger.warn('Invalid Authorization signature', { 
+          subscriberId, 
+          ukId,
+          path: req.path
+        });
+        throw new ApiError('Invalid Authorization signature', 401);
+      }
+      
+      // Store subscriber info in request for later use
+      req.ondcSubscriber = {
+        id: subscriberId,
+        ukId,
+        publicKey: subscriber.signing_public_key
+      };
+    }
+    
+    // Process X-Gateway-Authorization header (if present)
+    if (gatewayAuthHeader) {
+      const gatewayAuthComponents = parseAuthHeader(gatewayAuthHeader);
+      
+      if (!gatewayAuthComponents) {
+        logger.warn('Invalid gateway authorization header format', { path: req.path });
+        throw new ApiError('Invalid gateway authorization header format', 401);
+      }
+
+      const { subscriberId, ukId, algorithm } = gatewayAuthComponents;
+      
+      // Lookup gateway in registry to get its public key
+      const gateway = await registryService.lookupSubscriber(subscriberId, ukId);
+      
+      if (!gateway || !gateway.signing_public_key) {
+        logger.warn('Gateway not found in registry or missing public key', { 
+          subscriberId, 
+          ukId,
+          path: req.path
+        });
+        throw new ApiError('Gateway not found or missing public key', 401);
+      }
+      
+      // Verify the X-Gateway-Authorization header
+      const isValid = await ondcCryptoSdk.isHeaderValid({
+        body,
+        header: gatewayAuthHeader,
+        publicKey: gateway.signing_public_key
+      });
+      
+      if (!isValid) {
+        logger.warn('Invalid X-Gateway-Authorization signature', { 
+          subscriberId, 
+          ukId,
+          path: req.path
+        });
+        throw new ApiError('Invalid X-Gateway-Authorization signature', 401);
+      }
+      
+      // Store gateway info in request for later use
+      req.ondcGateway = {
+        id: subscriberId,
+        ukId,
+        publicKey: gateway.signing_public_key
+      };
+    }
     
     next();
   } catch (error) {
@@ -108,13 +205,13 @@ const parseAuthHeader = (authHeader) => {
     
     const [subscriberId, ukId, keyAlgorithm] = keyIdParts;
     
-    // Extract digest from signature (if present)
+    // Extract digest if present
     let digest = null;
     if (components.digest) {
-      digest = components.digest;
-    } else {
-      // Some implementations include digest in the signature itself
-      // This would need to be extracted based on your specific implementation
+      const digestParts = components.digest.split('=');
+      if (digestParts.length >= 2) {
+        digest = digestParts[1];
+      }
     }
     
     return {
