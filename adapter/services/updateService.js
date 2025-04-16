@@ -12,10 +12,12 @@ const updateOrderInWooCommerce = async (orderId, updateData) => {
     
     logger.info(`Updating WooCommerce order: ${mappedOrderId}`);
     
-    // In production, you would call WooCommerce API
-    // return await wooCommerceAPI.put(`/orders/${mappedOrderId}`, updateData);
+    if (process.env.NODE_ENV === 'production') {
+      // Production: Use actual WooCommerce API
+      return await wooCommerceAPI.put(`/orders/${mappedOrderId}`, updateData);
+    }
     
-    // For development, read sample data
+    // Development: Use sample data
     const filePath = path.join(__dirname, '../Data/status.json');
     const rawData = await fs.readFile(filePath, 'utf8');
     const orderData = JSON.parse(rawData);
@@ -40,10 +42,12 @@ const getUpdatedOrder = async (orderId) => {
     
     logger.info(`Fetching updated WooCommerce order: ${mappedOrderId}`);
     
-    // In production, you would call WooCommerce API
-    // return await wooCommerceAPI.get(`/orders/${mappedOrderId}`);
+    if (process.env.NODE_ENV === 'production') {
+      // Production: Use actual WooCommerce API
+      return await wooCommerceAPI.get(`/orders/${mappedOrderId}`);
+    }
     
-    // For development, read sample data
+    // Development: Use sample data
     const filePath = path.join(__dirname, '../Data/status.json');
     const rawData = await fs.readFile(filePath, 'utf8');
     const orderData = JSON.parse(rawData);
@@ -175,13 +179,17 @@ const sendOnUpdateResponse = async (context, message) => {
       orderId: message.order_id || message.order?.id
     });
     
-    // Log response in development mode
-    console.log("\n===== ON_UPDATE RESPONSE START =====");
-    console.log(JSON.stringify(onUpdateResponse, null, 2));
-    console.log("===== ON_UPDATE RESPONSE END =====\n");
+    // Development only: Log response
+    if (process.env.NODE_ENV !== 'production') {
+      console.log("\n===== ON_UPDATE RESPONSE START =====");
+      console.log(JSON.stringify(onUpdateResponse, null, 2));
+      console.log("===== ON_UPDATE RESPONSE END =====\n");
+    }
     
-    // UNCOMMENT FOR PRODUCTION: Send the actual request
-    // await makeRequest('POST', onUpdateUrl, onUpdateResponse);
+    // Send the actual request in production
+    if (process.env.NODE_ENV === 'production') {
+      await makeRequest('POST', onUpdateUrl, onUpdateResponse);
+    }
     
     logger.info(`Successfully sent on_update response`, {
       transactionId: context.transaction_id
