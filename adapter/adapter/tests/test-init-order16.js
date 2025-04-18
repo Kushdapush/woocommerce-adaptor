@@ -1,8 +1,8 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 
-async function testInit() {
-  // Generate truly unique identifiers
+async function testInitOrder16() {
+  // Generate unique identifiers
   const now = Date.now();
   const randomStr = Math.random().toString(36).substring(2, 8);
   const timestamp = new Date().toISOString();
@@ -29,30 +29,30 @@ async function testInit() {
         },
         "items": [
           {
-            "id": "test-product-3", // New product ID
+            "id": "test-product-2", // Different product for order 16
             "quantity": {
-              "count": 3 // Increased quantity
+              "count": 2  // Order 2 items
             },
             "price": {
               "currency": "INR",
-              "value": "300.00" // New price
+              "value": "200.00"  // Different price
             }
           }
         ],
         "billing": {
-          "name": `New Test Customer ${randomStr}`,
+          "name": `Order16 Test Customer ${randomStr}`,
           "phone": `9999${Math.floor(Math.random() * 10000).toString().padStart(5, '0')}`,
-          "email": `test.${randomStr}@example.com`,
+          "email": `order16.test.${randomStr}@example.com`,
           "address": {
-            "door": "789", // New address
-            "name": "Home",
-            "building": "Green Valley",
-            "street": "MG Road",
-            "locality": "Indiranagar",
+            "door": "456", // Different address
+            "name": "Office",
+            "building": "Tech Park",
+            "street": "Electronics City",
+            "locality": "Phase 1",
             "city": "Bangalore",
             "state": "Karnataka",
             "country": "India",
-            "area_code": "560038"
+            "area_code": "560100"
           }
         },
         "fulfillments": [
@@ -61,22 +61,22 @@ async function testInit() {
             "type": "Delivery",
             "end": {
               "location": {
-                "gps": "12.9716,77.6946", // Different location
+                "gps": "12.8458,77.5929", // Different location
                 "address": {
-                  "door": "789",
-                  "name": "Home",
-                  "building": "Green Valley",
-                  "street": "MG Road",
-                  "locality": "Indiranagar",
+                  "door": "456",
+                  "name": "Office",
+                  "building": "Tech Park",
+                  "street": "Electronics City",
+                  "locality": "Phase 1",
                   "city": "Bangalore",
                   "state": "Karnataka",
                   "country": "India",
-                  "area_code": "560038"
+                  "area_code": "560100"
                 }
               },
               "contact": {
                 "phone": `9999${Math.floor(Math.random() * 10000).toString().padStart(5, '0')}`,
-                "email": `test.${randomStr}@example.com`
+                "email": `order16.test.${randomStr}@example.com`
               }
             }
           }
@@ -84,7 +84,7 @@ async function testInit() {
         "payment": {
           "type": "ON-ORDER",
           "params": {
-            "amount": "300.00", // Updated amount
+            "amount": "200.00",
             "currency": "INR"
           },
           "status": "NOT-PAID"
@@ -94,16 +94,14 @@ async function testInit() {
   };
 
   try {
-    console.log('\n=== Creating New ONDC Order ===');
+    console.log('\n=== Creating Order #16 ===');
     console.log('Transaction ID:', payload.context.transaction_id);
     console.log('Customer:', payload.message.order.billing.name);
     console.log('Email:', payload.message.order.billing.email);
+    console.log('Amount:', payload.message.order.payment.params.amount);
 
     const response = await axios.post('http://localhost:3000/api/v1/init', payload, {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer MC4CAQAwBQYDK2VwBCIEIKr5LUQq6sX2Z7HpMdRTtNi09Y1sCwvr3A3GqcjLGGsS` // Added auth token
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
 
     console.log('\n=== Response ===');
@@ -125,7 +123,7 @@ async function testInit() {
 
 // Execute if run directly
 if (require.main === module) {
-  testInit().catch(console.error);
+  testInitOrder16().catch(console.error);
 }
 
-module.exports = testInit;
+module.exports = testInitOrder16;

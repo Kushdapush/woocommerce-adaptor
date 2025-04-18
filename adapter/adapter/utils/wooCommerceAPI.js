@@ -2,243 +2,133 @@ const WooCommerceRestApi = require('@woocommerce/woocommerce-rest-api').default;
 const config = require('./config');
 const logger = require('./logger');
 
-// Initialize WooCommerce API client
-const wooCommerce = new WooCommerceRestApi({
-  url: config.woocommerce.url,
-  consumerKey: config.woocommerce.consumerKey,
-  consumerSecret: config.woocommerce.consumerSecret,
-  version: config.woocommerce.version,
-  timeout: config.woocommerce.timeout
-});
-
-/**
- * Get products from WooCommerce
- * @param {Object} params - Query parameters
- * @returns {Promise<Object>} WooCommerce products response
- */
-const getProducts = async (params = {}) => {
-  try {
-    const response = await wooCommerce.get('products', params);
-    return response.data;
-  } catch (error) {
-    logger.error('Error fetching products from WooCommerce', { error: error.message });
-    throw error;
-  }
-};
-const testConnection = async () => {
-  try {
-    logger.info('Testing WooCommerce API connection...');
-    // First try to ping the WordPress site root
-    const rootUrl = config.woocommerce.url;
-    
-    // Log the API configuration (excluding sensitive info)
-    logger.info('WooCommerce API Configuration', {
-      url: config.woocommerce.url,
-      version: config.woocommerce.version,
-      timeout: config.woocommerce.timeout
-    });
-    
-    // Test with a simple API call that should always work if WC is set up
-    const response = await wooCommerce.get('');
-    logger.info('WooCommerce API connection successful', {
-      status: response.status,
-      namespaces: response.data?.namespaces || []
-    });
-    return true;
-  } catch (error) {
-    logger.error('WooCommerce API connection test failed', {
-      error: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-      url: error.config?.url
-    });
-    return false;
-  }
-};
-
-/**
- * Get product by ID from WooCommerce
- * @param {number} productId - Product ID
- * @returns {Promise<Object>} WooCommerce product
- */
-const getProductById = async (productId) => {
-  try {
-    const response = await wooCommerce.get(`products/${productId}`);
-    return response.data;
-  } catch (error) {
-    logger.error('Error fetching product by ID from WooCommerce', { 
-      error: error.message,
-      productId 
-    });
-    throw error;
-  }
-};
-
-/**
- * Get product variations from WooCommerce
- * @param {number} productId - Product ID
- * @returns {Promise<Object>} WooCommerce product variations
- */
-const getProductVariations = async (productId) => {
-  try {
-    const response = await wooCommerce.get(`products/${productId}/variations`);
-    return response.data;
-  } catch (error) {
-    logger.error('Error fetching product variations from WooCommerce', { 
-      error: error.message,
-      productId 
-    });
-    throw error;
-  }
-};
-
-/**
- * Create a draft order in WooCommerce
- * @param {Object} orderData - WooCommerce order data
- * @returns {Promise<Object>} Created WooCommerce order
- */
-const createOrder = async (orderData) => {
-  try {
-    // Log the request URL for debugging
-    const requestUrl = `${config.woocommerce.url}/wp-json/wc/v3/orders`;
-    logger.info('Creating order in WooCommerce', { 
-      service: 'ondc-woocommerce-connector',
-      requestUrl,
-      orderDataKeys: Object.keys(orderData)
-    });
-    
-    // Make the API call
-    const response = await wooCommerce.post('orders', orderData);
-    
-    // Log response structure for debugging
-    logger.info('WooCommerce API response structure', {
-      service: 'ondc-woocommerce-connector',
-      responseType: typeof response,
-      hasData: response?.data ? 'yes' : 'no',
-      status: response?.status,
-      dataKeys: response?.data ? Object.keys(response.data) : []
-    });
-    
-    logger.info('Successfully created order in WooCommerce', {
-      service: 'ondc-woocommerce-connector',
-      status: response?.status,
-      orderId: response?.data?.id || 'unknown'
-    });
-    
-    // If for some reason we're getting back a raw response without .data property
-    // Make sure we return in a consistent format
-    if (response && !response.data && response.id) {
-      // Response is already the data object
-      return response;
+class WooCommerceHandler {
+    constructor() {
+        this.client = new WooCommerceRestApi({
+            url: config.woocommerce.url,
+            consumerKey: config.woocommerce.consumerKey,
+            consumerSecret: config.woocommerce.consumerSecret,
+            version: config.woocommerce.version || 'wc/v3',
+            queryStringAuth: true
+        });
     }
-    
-    // Return either response.data or the whole response object
-    return response;
-  } catch (error) {
-    logger.error('Error creating order in WooCommerce', { 
-      service: 'ondc-woocommerce-connector',
-      error: error.message,
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      responseData: error.response?.data
-    });
-    throw error;
-  }
-};
 
-/**
- * Update an order in WooCommerce
- * @param {number} orderId - Order ID
- * @param {Object} orderData - WooCommerce order data to update
- * @returns {Promise<Object>} Updated WooCommerce order
- */
-const updateOrder = async (orderId, orderData) => {
-  try {
-    logger.info('Updating order in WooCommerce', { 
-      orderId,
-      orderData: { ...orderData, line_items: 'Redacted for logging' }
-    });
-    const response = await wooCommerce.put(`orders/${orderId}`, orderData);
-    return response.data;
-  } catch (error) {
-    logger.error('Error updating order in WooCommerce', { 
-      error: error.message,
-      orderId,
-      orderData: { ...orderData, line_items: 'Redacted for logging' }
-    });
-    throw error;
-  }
-};
+    async verifyConnection() {
+        try {
+            const response = await this.client.get('');
+            logger.info('WooCommerce API connection successful', {
+                namespaces: response.data?.namespaces || [],
+                status: response.status
+            });
+            logger.info('WooCommerce API connection verified successfully');
+            return true;
+        } catch (error) {
+            logger.error('WooCommerce connection failed', { error: error.message });
+            throw error;
+        }
+    }
 
-/**
- * Get an order from WooCommerce
- * @param {number} orderId - Order ID
- * @returns {Promise<Object>} WooCommerce order
- */
-const getOrder = async (orderId) => {
-  try {
-    const response = await wooCommerce.get(`orders/${orderId}`);
-    return response.data;
-  } catch (error) {
-    logger.error('Error fetching order from WooCommerce', { 
-      error: error.message,
-      orderId 
-    });
-    throw error;
-  }
-};
+    async createOrder(orderData) {
+        try {
+            const response = await this.client.post('orders', orderData);
+            logger.info('Order created successfully', {
+                orderId: response.data.id,
+                status: response.data.status
+            });
+            return response.data;
+        } catch (error) {
+            logger.error('Order creation failed', {
+                error: error.message,
+                orderData: JSON.stringify(orderData)
+            });
+            throw error;
+        }
+    }
 
-/**
- * Get orders from WooCommerce with query parameters
- * @param {Object} params - Query parameters
- * @returns {Promise<Array>} Array of WooCommerce orders
- */
-const getOrders = async (params = {}) => {
-  try {
-    logger.info('Fetching orders from WooCommerce', { params });
-    const response = await wooCommerce.get('orders', params);
-    logger.info('Successfully fetched orders from WooCommerce', { count: response.data.length });
-    return response.data;
-  } catch (error) {
-    logger.error('Error fetching orders from WooCommerce', { 
-      error: error.message,
-      params 
-    });
-    throw error;
-  }
-};
+    async getOrders(params = {}) {
+        try {
+            const response = await this.client.get('orders', {
+                per_page: 20,
+                ...params
+            });
+            
+            logger.info('Retrieved orders successfully', {
+                count: response.data.length,
+                params: JSON.stringify(params)
+            });
+            
+            return response.data;
+        } catch (error) {
+            logger.error('Failed to get orders', {
+                error: error.message,
+                params: JSON.stringify(params)
+            });
+            throw error;
+        }
+    }
 
-/**
- * Get product categories from WooCommerce
- * @param {Object} params - Query parameters
- * @returns {Promise<Array>} Array of WooCommerce product categories
- */
-const getCategories = async (params = {}) => {
-  try {
-    logger.info('Fetching product categories from WooCommerce', { params });
-    const response = await wooCommerce.get('products/categories', params);
-    logger.info('Successfully fetched product categories', { count: response.data.length });
-    return response.data;
-  } catch (error) {
-    logger.error('Error fetching product categories from WooCommerce', { 
-      error: error.message,
-      params 
-    });
-    throw error;
-  }
-};
+    async getOrder(orderId) {
+        try {
+            // Handle both numeric and string IDs
+            const cleanId = String(orderId).replace(/[^0-9]/g, '');
+            if (!cleanId) {
+                throw new Error('Invalid order ID format');
+            }
 
-module.exports = {
-  getProducts,
-  getProductById,
-  getProductVariations,
-  createOrder,
-  updateOrder,
-  getOrder,
-  getCategories,
-  getOrders,
-  testConnection
-};
+            const response = await this.client.get(`orders/${cleanId}`);
+            logger.info('Retrieved order successfully', { orderId: cleanId });
+            return response.data;
+        } catch (error) {
+            logger.error('Failed to get order', {
+                orderId,
+                error: error.message
+            });
+            throw error;
+        }
+    }
+
+    async updateOrder(orderId, data) {
+        try {
+            const response = await this.client.put(`orders/${orderId}`, data);
+            logger.info('Order updated successfully', {
+                orderId,
+                newStatus: data.status
+            });
+            return response.data;
+        } catch (error) {
+            logger.error('Failed to update order', { orderId, error: error.message });
+            throw error;
+        }
+    }
+
+    async cancelOrder(orderId, reason = '') {
+        try {
+            const data = {
+                status: 'cancelled',
+                customer_note: reason || 'Cancelled via ONDC'
+            };
+            
+            const response = await this.updateOrder(orderId, data);
+            logger.info('Order cancelled successfully', { orderId });
+            return response;
+        } catch (error) {
+            logger.error('Failed to cancel order', { orderId, error: error.message });
+            throw error;
+        }
+    }
+}
+
+// Create singleton instance
+const wooCommerceAPI = new WooCommerceHandler();
+
+// Initialize connection
+(async () => {
+    try {
+        await wooCommerceAPI.verifyConnection();
+    } catch (error) {
+        logger.error('Initial WooCommerce setup failed', { error: error.message });
+    }
+})();
+
+module.exports = wooCommerceAPI;
 

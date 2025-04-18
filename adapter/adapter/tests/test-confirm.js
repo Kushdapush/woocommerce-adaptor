@@ -1,137 +1,130 @@
 const axios = require('axios');
+const logger = require('../utils/logger');
 
-async function testConfirm() {
-  const payload = {
-    "context": {
-      "domain": "ONDC:RET10",
-      "country": "IND",
-      "city": "std:080",
-      "action": "confirm",
-      "core_version": "1.1.0",
-      "bap_id": "buyer-app.ondc.org",
-      "bap_uri": "https://buyer-app.ondc.org/protocol/v1",
-      "bpp_id": "woocommerce1-test-adaptor.ondc.org",
-      "bpp_uri": "https://woocommerce1-test-adaptor.ondc.org/protocol/v1",
-      "transaction_id": "T2" + Date.now(), // Add timestamp to ensure uniqueness
-      "message_id": "M3" + Date.now(),     // Add timestamp to ensure uniqueness
-      "timestamp": new Date().toISOString()
-    },
-    "message": {
-      "order": {
-        "id": "O1" + Date.now(), // Add timestamp to ensure uniqueness
-        "provider": {
-          "id": "woocommerce1-test-adaptor.ondc.org",
-          "locations": [
-            {
-              "id": "L1"
-            }
-          ]
+async function testInit() {
+    // Generate unique identifiers
+    const now = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    
+    const payload = {
+        context: {
+            domain: "ONDC:RET10",
+            action: "init",
+            core_version: "1.1.0",
+            bap_id: "buyer-app.ondc.org",
+            bap_uri: "http://localhost:3000",
+            bpp_id: "woocommerce-test-adaptor.ondc.org",
+            bpp_uri: "http://localhost:3000/api/v1",
+            transaction_id: `T_${randomStr}_${now}`,
+            message_id: `M_${randomStr}_${now}`,
+            timestamp: new Date().toISOString(),
+            country: "IND",
+            city: "std:080"
         },
-        "items": [
-          {
-            "id": "I1",
-            "fulfillment_id": "F1",
-            "quantity": {
-              "count": 1
-            }
-          }
-        ],
-        "billing": {
-          "name": "Test Customer",
-          "phone": "9999999999",
-          "email": "test@example.com",
-          "address": {
-            "name": "Home",
-            "building": "123 Test Building",
-            "locality": "Test Locality",
-            "city": "Bangalore",
-            "state": "Karnataka",
-            "country": "India",
-            "area_code": "560001"
-          }
-        },
-        "fulfillments": [
-          {
-            "id": "F1",
-            "type": "Delivery",
-            "end": {
-              "location": {
-                "address": {
-                  "name": "Home",
-                  "building": "12355 Test Building",
-                  "locality": "Test Locality",
-                  "city": "Bangalore",
-                  "state": "Karnataka",
-                  "country": "India",
-                  "area_code": "560001"
+        message: {
+            order: {
+                items: [{
+                    id: "test-product-1",
+                    quantity: { count: 1 }
+                }],
+                billing: {
+                    name: `Test Customer ${randomStr}`,
+                    phone: "9999999999",
+                    email: `test.${randomStr}@example.com`,
+                    address: {
+                        building: "123 Test Building",
+                        city: "Bangalore",
+                        state: "Karnataka",
+                        country: "India",
+                        area_code: "560001"
+                    }
                 }
-              },
-              "contact": {
-                "phone": "9999999999"
-              }
             }
-          }
-        ],
-        "quote": {
-          "price": {
-            "currency": "INR",
-            "value": "100.00"
-          },
-          "breakup": [
-            {
-              "@ondc/org/item_id": "I1",
-              "@ondc/org/item_quantity": {
-                "count": 1
-              },
-              "title": "Test Product",
-              "@ondc/org/title_type": "item",
-              "price": {
-                "currency": "INR",
-                "value": "80.00"
-              }
-            },
-            {
-              "@ondc/org/item_id": "F1",
-              "title": "Delivery charges",
-              "@ondc/org/title_type": "delivery",
-              "price": {
-                "currency": "INR",
-                "value": "20.00"
-              }
-            }
-          ]
-        },
-        "payment": {
-          "type": "ON-ORDER",
-          "status": "PAID",
-          "collected_by": "BAP",
-          "@ondc/org/buyer_app_finder_fee_type": "percent",
-          "@ondc/org/buyer_app_finder_fee_amount": "3"
         }
-      }
-    }
-  };
+    };
 
-  try {
-    console.log('Sending confirm request to:', 'http://localhost:3000/api/v1/confirm');
-    console.log('Transaction ID:', payload.context.transaction_id);
-    console.log('Order ID:', payload.message.order.id);
-    
-    const response = await axios.post('http://localhost:3000/api/v1/confirm', payload, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    console.log('Response status:', response.status);
-    console.log('Response data:', JSON.stringify(response.data, null, 2));
-  } catch (error) {
-    console.error('Error:', error.message);
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    try {
+        console.log('\n=== Testing ONDC Init API ===');
+        console.log('Transaction ID:', payload.context.transaction_id);
+        const response = await axios.post('http://localhost:3000/api/v1/init', payload);
+        return response.data;
+    } catch (error) {
+        console.error('Init Error:', error.message);
+        throw error;
     }
-  }
 }
 
-testConfirm();
+async function testConfirm(orderId) {
+    if (!orderId) {
+        throw new Error('Order ID is required for confirm action');
+    }
+
+    const now = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    
+    const payload = {
+        context: {
+            domain: "ONDC:RET10",
+            action: "confirm",
+            core_version: "1.1.0",
+            bap_id: "buyer-app.ondc.org",
+            bap_uri: "http://localhost:3000",
+            bpp_id: "woocommerce-test-adaptor.ondc.org",
+            bpp_uri: "http://localhost:3000/api/v1",
+            transaction_id: `T_${randomStr}_${now}`,
+            message_id: `M_${randomStr}_${now}`,
+            timestamp: new Date().toISOString(),
+            country: "IND",
+            city: "std:080"
+        },
+        message: {
+            order: {
+                id: orderId,
+                state: "Created"
+            }
+        }
+    };
+
+    try {
+        console.log('\n=== Testing ONDC Confirm API ===');
+        console.log('Transaction ID:', payload.context.transaction_id);
+        console.log('Order ID:', orderId);
+        
+        const response = await axios.post('http://localhost:3000/api/v1/confirm', payload);
+        return response.data;
+    } catch (error) {
+        console.error('Confirm Error:', error.message);
+        throw error;
+    }
+}
+
+// Main execution
+if (require.main === module) {
+    const action = process.argv[2];
+    const orderId = process.argv[3];
+
+    if (!action || !['init', 'confirm'].includes(action)) {
+        console.error('Usage: node test-confirm.js <action> [orderId]');
+        console.error('Actions: init, confirm');
+        console.error('Example: node test-confirm.js init');
+        console.error('Example: node test-confirm.js confirm 123');
+        process.exit(1);
+    }
+
+    (async () => {
+        try {
+            if (action === 'init') {
+                const result = await testInit();
+                console.log('\nInit Response:', result);
+            } else {
+                const result = await testConfirm(orderId);
+                console.log('\nConfirm Response:', result);
+            }
+        } catch (error) {
+            console.error('\nError:', error.message);
+            process.exit(1);
+        }
+    })();
+}
+
+module.exports = { testInit, testConfirm };

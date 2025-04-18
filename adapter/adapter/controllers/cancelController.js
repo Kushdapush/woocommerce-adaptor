@@ -18,7 +18,14 @@ const processCancelRequest = async (req, res, next) => {
       transactionId,
       messageId,
       domain: req.body?.context?.domain,
-      city: req.body?.context?.city
+      city: req.body?.context?.city,
+      orderId: req.body?.message?.order_id
+    });
+
+    // Log full payload for debugging
+    logger.debug('Cancel request payload', {
+      transactionId,
+      payload: JSON.stringify(req.body)
     });
     
     // Validate request body using Joi schema
@@ -32,7 +39,10 @@ const processCancelRequest = async (req, res, next) => {
       throw new ApiError(`Validation error: ${errorMessages}`, 400);
     }
     
-    logger.info('Cancel request validation passed, processing request', { transactionId });
+    logger.info('Cancel request validation passed, processing request', { 
+      transactionId,
+      orderId: req.body.message.order_id
+    });
     
     // Send ACK response immediately
     res.status(202).json({
@@ -79,49 +89,75 @@ const processCancelAsync = async (request) => {
   const transactionId = context.transaction_id;
   const orderId = request.message.order_id;
   const cancellationReasonId = request.message.cancellation_reason_id;
+  
+  // Get fulfillment ID either from descriptor.short_desc or default to order ID
+  // In ONDC, if descriptor.short_desc is not provided, it's a full order cancellation
   const fulfillmentId = request.message.descriptor?.short_desc || orderId;
 
   // Add retry mechanism for validation
   const MAX_RETRIES = 3;
   let retryCount = 0;
+  let lastError = null;
   
   try {
     logger.info('Starting async processing of cancel request', { 
       transactionId, 
       orderId,
       cancellationReasonId,
-      fulfillmentId,
-      attempt: retryCount + 1
+      fulfillmentId
     });
 
+    // Retry validation a few times in case of temporary issues
     let validationResult;
-    while (retryCount < MAX_RETRIES) {
-      validationResult = await cancelService.validateCancellation(
-        orderId, 
-        cancellationReasonId, 
-        fulfillmentId,
-        context
-      );
-
-      if (validationResult.valid || validationResult.finalFailure) {
-        break;
+    let success = false;
+    
+    while (retryCount < MAX_RETRIES && !success) {
+      try {
+        validationResult = await cancelService.validateCancellation(
+          orderId, 
+          cancellationReasonId, 
+          fulfillmentId,
+          context
+        );
+        
+        success = true;
+      } catch (error) {
+        lastError = error;
+        retryCount++;
+        logger.warn(`Validation attempt ${retryCount} failed`, {
+          transactionId,
+          orderId,
+          error: error.message
+        });
+        
+        if (retryCount < MAX_RETRIES) {
+          // Wait before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+        }
       }
-
-      retryCount++;
-      await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+    }
+    
+    // If we couldn't validate after all retries
+    if (!success) {
+      throw lastError || new Error('Validation failed after maximum retries');
     }
 
-    // Add more detailed validation failure logging
+    // If validation failed for a legitimate reason
     if (!validationResult.valid) {
       logger.warn('Cancellation validation failed', {
         transactionId,
         orderId,
         reason: validationResult.reason,
-        retryAttempts: retryCount,
-        errorCode: validationResult.errorCode,
-        isFinal: validationResult.finalFailure
+        errorCode: validationResult.errorCode
       });
-      return;
+      
+      // If it's a "final" failure that won't be fixed with retries, return
+      if (validationResult.finalFailure) {
+        return;
+      }
+      
+      // Otherwise try again in case it's a temporary issue
+      throw new Error(`Validation failed: ${validationResult.reason}`);
     }
     
     // Process the cancellation
@@ -143,6 +179,7 @@ const processCancelAsync = async (request) => {
     
     logger.info('Completed async processing of cancel request', { 
       transactionId,
+      orderId,
       callbackSuccess: callbackResult
     });
   } catch (error) {
@@ -158,6 +195,35 @@ const processCancelAsync = async (request) => {
     };
     
     logger.error('Error in async processing of cancel request', errorContext);
+    
+    // Try one more time with direct cancel approach as a fallback
+    try {
+      logger.info('Attempting fallback direct cancellation', {
+        transactionId,
+        orderId
+      });
+      
+      // This is our last attempt - try to directly cancel in WooCommerce
+      // without all the validation and extra steps
+      const wooCommerceAPI = require('../utils/wooCommerceAPI');
+      
+      // Try to find and cancel the order directly
+      await wooCommerceAPI.updateOrder(orderId, {
+        status: 'cancelled',
+        customer_note: 'Emergency cancellation due to system error: ' + error.message
+      });
+      
+      logger.info('Fallback direct cancellation succeeded', {
+        transactionId,
+        orderId
+      });
+    } catch (fallbackError) {
+      logger.error('Fallback direct cancellation also failed', {
+        transactionId,
+        orderId,
+        error: fallbackError.message
+      });
+    }
   }
 };
 

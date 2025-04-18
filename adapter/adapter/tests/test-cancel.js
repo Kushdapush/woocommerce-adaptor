@@ -1,52 +1,52 @@
 const axios = require('axios');
 
-async function testCancel() {
-  // First, we need an order ID to cancel.
-  // This should be an existing order ID in your WooCommerce system
-  // You can either hardcode an ID from a previous test or implement logic to get the latest order
-  const orderId = 'O1' + Date.now(); // Replace with actual order ID if needed
-
+/**
+ * Test the ONDC cancel API endpoint
+ * @param {string} orderId - The order ID to cancel
+ * @param {string} reasonId - Cancellation reason code
+ */
+async function testCancelRequest(orderId, reasonId = '001') {
+  // Generate unique identifiers for this test
+  const now = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 15);
+  const timestamp = new Date().toISOString();
+  
+  // Create unique transaction and message IDs
+  const transactionId = `T_${randomStr}_${now}`;
+  const messageId = `M_${randomStr}_${now}`;
+  
+  // Build the payload
   const payload = {
     "context": {
-      "domain": "ONDC:RET10",
+      "domain": "retail",
+      "action": "cancel",
+      "core_version": "1.0.0",
+      "bap_id": "buyer-app.ondc.org",
+      "bap_uri": "http://localhost:3000/webhook", // Use local webhook for testing
+      "bpp_id": "woocommerce-test-adaptor.ondc.org",
+      "bpp_uri": "http://localhost:3000/api/v1",
+      "transaction_id": transactionId,
+      "message_id": messageId,
+      "timestamp": timestamp,
       "country": "IND",
       "city": "std:080",
-      "action": "cancel",
-      "core_version": "1.1.0",
-      "bap_id": "buyer-app.ondc.org",
-      "bap_uri": "https://buyer-app.ondc.org/protocol/v1",
-      "bpp_id": "woocommerce1-test-adaptor.ondc.org",
-      "bpp_uri": "https://woocommerce1-test-adaptor.ondc.org/protocol/v1",
-      "transaction_id": "T2" + Date.now(), // Add timestamp to ensure uniqueness
-      "message_id": "M4" + Date.now(),     // Add timestamp to ensure uniqueness
-      "timestamp": new Date().toISOString()
+      "ttl": "PT30S"
     },
     "message": {
       "order_id": orderId,
-      "cancellation_reason_id": "001", // Valid reason codes: 001-009
+      "cancellation_reason_id": reasonId,
       "descriptor": {
-        "name": "Order cancellation",
-        "short_desc": "Order cancelled by buyer",
-        "tags": [
-          {
-            "code": "params",
-            "list": [
-              {
-                "code": "force",
-                "value": "no"
-              }
-            ]
-          }
-        ]
+        "name": "test_descriptor",
+        "short_desc": "Customer requested cancellation"
       }
     }
   };
 
   try {
-    console.log('Sending cancel request to:', 'http://localhost:3000/api/v1/cancel');
-    console.log('Transaction ID:', payload.context.transaction_id);
-    console.log('Order ID:', payload.message.order_id);
-    console.log('Cancellation Reason:', payload.message.cancellation_reason_id);
+    console.log('\n=== Testing ONDC Cancel API ===');
+    console.log(`Order ID: ${orderId}`);
+    console.log(`Cancellation Reason: ${reasonId}`);
+    console.log(`Transaction ID: ${transactionId}`);
     
     const response = await axios.post('http://localhost:3000/api/v1/cancel', payload, {
       headers: {
@@ -54,28 +54,45 @@ async function testCancel() {
       }
     });
     
-    console.log('Response status:', response.status);
-    console.log('Response data:', JSON.stringify(response.data, null, 2));
-  } catch (error) {
-    console.error('Error:', error.message);
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    console.log('\nResponse:', {
+      status: response.status,
+      ack: response.data?.message?.ack,
+      error: response.data?.error
+    });
+    
+    // Wait for cancel processing to complete
+    console.log('\nWaiting for cancel processing...');
+    await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds
+    
+    // Verify the order status (optional)
+    try {
+      console.log('\nChecking order status (if available)...');
+      const verifyResponse = await axios.get(`http://localhost:3000/api/v1/order/${orderId}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Order status:', verifyResponse.data?.message?.order?.state || 'unknown');
+    } catch (verifyError) {
+      console.log('Could not verify order status:', verifyError.message);
     }
-  }
-}
-
-// Optional: Function to get an existing order ID from WooCommerce
-// This would require additional setup to query your WooCommerce API
-async function getExistingOrderId() {
-  try {
-    // Implementation to query WooCommerce for latest order with ONDC metadata
-    // This is just a placeholder for the concept
-    return 'O1'; // Return a default value for now
+    
+    console.log('\nTest complete! Check WooCommerce admin for cancelled order.');
   } catch (error) {
-    console.error('Error getting existing order ID:', error.message);
-    return 'O1'; // Fallback to default
+    console.error('\nError occurred:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
   }
 }
 
-testCancel();
+// Parse command line arguments
+const args = process.argv.slice(2);
+const orderId = args[0] || '15'; // Default to order ID 15
+const reasonId = args[1] || '001'; // Default reason: Order delivery delayed
+
+// Run the test
+console.log(`Starting cancel test for Order ID: ${orderId} with Reason: ${reasonId}`);
+testCancelRequest(orderId, reasonId);

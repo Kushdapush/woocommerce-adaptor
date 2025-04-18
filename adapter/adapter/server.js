@@ -1,5 +1,4 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -8,6 +7,7 @@ const config = require('./utils/config');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./utils/errorHandler');
 const { verifyAuthentication } = require('./auth/authMiddleware');
+const webhookController = require('./controllers/webhookController');
 
 // Import routes
 const searchRoutes = require('./routes/searchRoutes');
@@ -27,30 +27,22 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 
-// Single body parsing middleware with raw body capture
+// Update the body parser configuration
 app.use(express.json({
+  limit: '50mb',
   verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  },
-  limit: config.server.bodyLimit
-}));
-
-// Add error handling for JSON parsing
-app.use((err, req, res, next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    logger.error('JSON Parse Error', { 
-      error: err.message,
-      body: req.rawBody
-    });
-    return res.status(400).json({ 
-      error: {
-        message: 'Invalid JSON payload',
-        details: err.message
+    try {
+      req.rawBody = buf.toString();
+      if (!req.rawBody) {
+        throw new Error('Empty request body');
       }
-    });
+      // Verify JSON parsing
+      JSON.parse(req.rawBody);
+    } catch (error) {
+      throw new Error('Invalid JSON payload');
+    }
   }
-  next();
-});
+}));
 
 app.use(express.urlencoded({ 
   extended: true, 
@@ -61,6 +53,19 @@ app.use(morgan('combined', {
     write: message => logger.info(message.trim()) 
   } 
 }));
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  if (req.method === 'POST') {
+    logger.info('Received request', {
+      path: req.path,
+      method: req.method,
+      body: req.body,
+      headers: req.headers
+    });
+  }
+  next();
+});
 
 // Apply authentication middleware if enabled
 if (config.server.enableAuthentication) {
@@ -97,23 +102,32 @@ app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/cancel', cancelRoutes);
 app.use('/api/v1/on_cancel', onCancelRoutes);
 
+// Add webhook routes
+app.post('/webhook/on_init', webhookController.handleOnInit);
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Error handling middleware
+// Update error handling middleware
 app.use((err, req, res, next) => {
   logger.error('Request processing error', {
     error: err.message,
     stack: err.stack,
-    body: req.rawBody
+    path: req.path,
+    body: req.rawBody || req.body
   });
 
+  // Send NACK for API errors
   res.status(500).json({
+    message: {
+      ack: { status: "NACK" }
+    },
     error: {
-      message: 'Internal Server Error',
-      details: err.message || 'Unable to process the request'
+      type: "Internal Server Error",
+      code: "500",
+      message: err.message
     }
   });
 });

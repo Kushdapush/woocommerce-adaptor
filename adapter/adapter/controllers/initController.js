@@ -12,50 +12,69 @@ const processInitRequest = async (req, res, next) => {
       domain: req.body?.context?.domain
     });
 
-    // Ensure request body is valid
-    if (!req.body || !req.body.context || !req.body.message || !req.body.message.order) {
-      throw new ApiError('Invalid request format. Missing required fields.', 400);
+    // Validate request
+    if (!req.body?.context || !req.body?.message?.order) {
+      throw new ApiError('Invalid request format', 400);
     }
 
-    // Send ACK response immediately as per ONDC guidelines
+    // Send immediate ACK
     res.status(202).json({
       message: {
-        ack: {
-          status: "ACK"
-        }
+        ack: { status: "ACK" }
       }
     });
-    
-    // Process the request asynchronously
-    setTimeout(async () => {
+
+    // Process asynchronously with Promise
+    Promise.resolve().then(async () => {
       try {
-        // Process the init request
-        const ondcResponse = await initService.processInit(req.body);
+        logger.info('Starting async init processing', { transactionId });
         
-        // Send on_init callback to BAP
-        const onInitService = require('../services/onInitService');
-        await onInitService.sendOnInitCallback(ondcResponse);
-        
-        logger.info('Successfully processed init request', {
-          transactionId,
-          orderId: ondcResponse.message.order.id
-        });
+        // Process with retry limit
+        const maxRetries = 3;
+        let retryCount = 0;
+        let lastError;
+
+        while (retryCount < maxRetries) {
+          try {
+            const ondcResponse = await initService.processInit(req.body);
+            const onInitService = require('../services/onInitService');
+            await onInitService.sendOnInitCallback(ondcResponse);
+            
+            logger.info('Init request processed successfully', {
+              transactionId,
+              orderId: ondcResponse.message.order.id,
+              attempt: retryCount + 1
+            });
+            return;
+          } catch (error) {
+            lastError = error;
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            }
+          }
+        }
+
+        throw lastError;
       } catch (asyncError) {
-        logger.error('Async processing error for init request', {
+        logger.error('Final async processing error', {
           transactionId,
           error: asyncError.message,
           stack: asyncError.stack
         });
       }
-    }, 0);
-    
-  } catch (error) {
-    logger.error('Error processing ONDC init request', { 
-      transactionId, 
-      error: error.message,
-      stack: error.stack
+    }).catch(error => {
+      logger.error('Unhandled promise rejection', {
+        transactionId,
+        error: error.message
+      });
     });
-    
+
+  } catch (error) {
+    logger.error('Init request error', {
+      transactionId,
+      error: error.message
+    });
     next(error);
   }
 };
