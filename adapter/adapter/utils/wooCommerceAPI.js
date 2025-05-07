@@ -1,134 +1,165 @@
 const WooCommerceRestApi = require('@woocommerce/woocommerce-rest-api').default;
-const config = require('./config');
 const logger = require('./logger');
+require('dotenv').config();
 
-class WooCommerceHandler {
+class WooCommerceAPI {
     constructor() {
-        this.client = new WooCommerceRestApi({
-            url: config.woocommerce.url,
-            consumerKey: config.woocommerce.consumerKey,
-            consumerSecret: config.woocommerce.consumerSecret,
-            version: config.woocommerce.version || 'wc/v3',
+        logger.info('Initializing WooCommerce API');
+        
+        if (!process.env.WOO_BASE_URL || !process.env.WOO_CONSUMER_KEY || !process.env.WOO_CONSUMER_SECRET) {
+            throw new Error('Missing required WooCommerce configuration');
+        }
+
+        this.api = new WooCommerceRestApi({
+            url: process.env.WOO_BASE_URL,
+            consumerKey: process.env.WOO_CONSUMER_KEY,
+            consumerSecret: process.env.WOO_CONSUMER_SECRET,
+            version: process.env.WOO_API_VERSION || 'wc/v3',
             queryStringAuth: true
         });
     }
 
-    async verifyConnection() {
+    async findProductBySku(sku) {
         try {
-            const response = await this.client.get('');
-            logger.info('WooCommerce API connection successful', {
-                namespaces: response.data?.namespaces || [],
-                status: response.status
-            });
-            logger.info('WooCommerce API connection verified successfully');
-            return true;
+            const response = await this.api.get('products', { sku });
+            return response.data.length > 0 ? response.data[0] : null;
         } catch (error) {
-            logger.error('WooCommerce connection failed', { error: error.message });
+            logger.error('Find product failed', { error: error.message, sku });
             throw error;
         }
     }
 
-    async createOrder(orderData) {
+    async createProduct(data) {
         try {
-            const response = await this.client.post('orders', orderData);
-            logger.info('Order created successfully', {
-                orderId: response.data.id,
-                status: response.data.status
-            });
+            const response = await this.api.post('products', data);
+            logger.info('Product created', { id: response.data.id });
             return response.data;
         } catch (error) {
-            logger.error('Order creation failed', {
-                error: error.message,
-                orderData: JSON.stringify(orderData)
-            });
+            logger.error('Create product failed', { error: error.message });
+            throw error;
+        }
+    }
+
+    async createOrder(data) {
+        try {
+            const response = await this.api.post('orders', data);
+            logger.info('Order created', { id: response.data.id });
+            return response.data;
+        } catch (error) {
+            logger.error('Create order failed', { error: error.message });
             throw error;
         }
     }
 
     async getOrders(params = {}) {
         try {
-            const response = await this.client.get('orders', {
-                per_page: 20,
+            const response = await this.api.get('orders', {
+                orderby: 'date',
+                order: 'desc',
+                per_page: 100,
                 ...params
             });
-            
-            logger.info('Retrieved orders successfully', {
-                count: response.data.length,
-                params: JSON.stringify(params)
-            });
-            
             return response.data;
         } catch (error) {
-            logger.error('Failed to get orders', {
-                error: error.message,
-                params: JSON.stringify(params)
-            });
+            logger.error('Get orders failed', { error: error.message });
             throw error;
         }
     }
 
     async getOrder(orderId) {
         try {
-            // Handle both numeric and string IDs
-            const cleanId = String(orderId).replace(/[^0-9]/g, '');
-            if (!cleanId) {
-                throw new Error('Invalid order ID format');
-            }
-
-            const response = await this.client.get(`orders/${cleanId}`);
-            logger.info('Retrieved order successfully', { orderId: cleanId });
+            logger.info('Getting order', { orderId });
+            const response = await this.api.get(`orders/${orderId}`);
             return response.data;
         } catch (error) {
-            logger.error('Failed to get order', {
-                orderId,
-                error: error.message
-            });
+            logger.error('Get order failed', { error: error.message, orderId });
             throw error;
         }
     }
 
     async updateOrder(orderId, data) {
         try {
-            const response = await this.client.put(`orders/${orderId}`, data);
-            logger.info('Order updated successfully', {
-                orderId,
-                newStatus: data.status
-            });
+            logger.info('Updating order', { orderId, data });
+            const response = await this.api.put(`orders/${orderId}`, data);
             return response.data;
         } catch (error) {
-            logger.error('Failed to update order', { orderId, error: error.message });
+            logger.error('Update order failed', { error: error.message, orderId });
             throw error;
         }
     }
 
-    async cancelOrder(orderId, reason = '') {
+    async cancelOrder(orderId, reason) {
         try {
-            const data = {
+            logger.info('Cancelling order', { orderId, reason });
+            return await this.updateOrder(orderId, {
                 status: 'cancelled',
-                customer_note: reason || 'Cancelled via ONDC'
-            };
-            
-            const response = await this.updateOrder(orderId, data);
-            logger.info('Order cancelled successfully', { orderId });
-            return response;
+                meta_data: [{ key: 'cancel_reason', value: reason }]
+            });
         } catch (error) {
-            logger.error('Failed to cancel order', { orderId, error: error.message });
+            logger.error('Cancel order failed', { error: error.message, orderId });
             throw error;
+        }
+    }
+
+    async confirmOrder(orderId) {
+        try {
+            logger.info('Confirming order', { orderId });
+            return await this.updateOrder(orderId, {
+                status: 'processing',
+                meta_data: [{ 
+                    key: 'confirmation_time', 
+                    value: new Date().toISOString() 
+                }]
+            });
+        } catch (error) {
+            logger.error('Confirm order failed', { error: error.message, orderId });
+            throw error;
+        }
+    }
+
+    async getLastOrderNumber() {
+        try {
+            const orders = await this.getOrders({
+                per_page: 1,
+                orderby: 'id',
+                order: 'desc'
+            });
+
+            if (orders.length === 0) return 0;
+
+            // Try to get custom order number from meta data
+            const orderNumberMeta = orders[0].meta_data.find(
+                meta => meta.key === 'ondc_order_number'
+            );
+
+            if (orderNumberMeta) {
+                return parseInt(orderNumberMeta.value);
+            }
+
+            // Fallback to WooCommerce order number
+            return parseInt(orders[0].number) || 0;
+        } catch (error) {
+            logger.error('Get last order number failed', { error: error.message });
+            return 0;
+        }
+    }
+
+    async getLastProductId() {
+        try {
+            const response = await this.api.get('products', {
+                per_page: 1,
+                orderby: 'id',
+                order: 'desc'
+            });
+            return response.data[0]?.id || 0;
+        } catch (error) {
+            logger.error('Get last product ID failed', { error: error.message });
+            return 0;
         }
     }
 }
 
-// Create singleton instance
-const wooCommerceAPI = new WooCommerceHandler();
-
-// Initialize connection
-(async () => {
-    try {
-        await wooCommerceAPI.verifyConnection();
-    } catch (error) {
-        logger.error('Initial WooCommerce setup failed', { error: error.message });
-    }
-})();
-
+// Create and export singleton instance
+const wooCommerceAPI = new WooCommerceAPI();
 module.exports = wooCommerceAPI;
 

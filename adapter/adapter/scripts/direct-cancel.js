@@ -15,8 +15,8 @@ try {
     woocommerce: {
       // Fill in your actual WooCommerce config values here
       url: 'http://localhost/wordpress2', // e.g., 'https://yourstore.com'
-      consumer_key: 'ck_5089ae0f0530358a152902a4537d36e724322746',
-      consumer_secret: 'ccs_9a3e4e64a882af0ce7131eb000b952c4fd9838f6'
+      consumer_key: 'ck_2d5fdd163befd8ef514f6eb3008aecd39fa4d28f',
+      consumer_secret: 'cs_e7d2c4516dc1fe46bc0e0199d136f8bb00e1e36c'
     }
   };
 }

@@ -1,38 +1,24 @@
-const logger = require('../utils/logger');
 const wooCommerceAPI = require('../utils/wooCommerceAPI');
-const { ApiError } = require('../utils/errorHandler');
+const logger = require('../utils/logger');
 
-const validateCancellation = async (orderId, cancellationReasonId, fulfillmentId, context) => {
+async function validateCancellation(orderId, transactionId) {
     try {
-        // Get order details
         const order = await wooCommerceAPI.getOrder(orderId);
         
-        // Check if order exists
         if (!order) {
-            return {
-                valid: false,
-                reason: 'Order not found',
-                errorCode: '40001',
-                finalFailure: true
-            };
+            throw new Error('Order not found');
         }
 
-        // Check if order can be cancelled
-        const cancellableStatuses = ['pending', 'processing', 'on-hold'];
-        if (!cancellableStatuses.includes(order.status)) {
-            return {
-                valid: false,
-                reason: `Order cannot be cancelled in status: ${order.status}`,
-                errorCode: '30009',
-                finalFailure: true
-            };
+        if (order.status === 'cancelled') {
+            throw new Error('Order is already cancelled');
         }
 
-        return { valid: true };
+        return true;
     } catch (error) {
+        logger.error('Validation failed', { error: error.message, orderId });
         throw new Error(`Error during validation: ${error.message}`);
     }
-};
+}
 
 const processCancellation = async (orderId, cancellationReasonId, fulfillmentId, context) => {
     try {
