@@ -28,7 +28,13 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
+const handleError = (res, error, customMessage) => {
+  logger.error(`${customMessage}: ${error.message}`, { stack: error.stack });
+  res.status(500).json({ error: customMessage });
+};
+
 module.exports = {
   ApiError,
-  errorHandler
+  errorHandler,
+  handleError
 };

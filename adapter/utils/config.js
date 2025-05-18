@@ -74,5 +74,9 @@ module.exports = {
     filename: process.env.LOG_FILE,
     maxSize: process.env.LOG_MAX_SIZE || '10m',
     maxFiles: parseInt(process.env.LOG_MAX_FILES || '7')
-  }
+  },
+
+  WOO_BASE_URL: process.env.WOO_BASE_URL,
+  WOO_CONSUMER_KEY: process.env.WOO_CONSUMER_KEY,
+  WOO_CONSUMER_SECRET: process.env.WOO_CONSUMER_SECRET,
 };
