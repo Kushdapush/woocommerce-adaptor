@@ -11,8 +11,10 @@ const { verifyAuthentication } = require('./auth/authMiddleware');
 const webhookController = require('./controllers/webhookController');
 
 // Import routes
-const searchRoutes = require('./routes/searchRoutes');
-const selectRoutes = require('./routes/selectRoutes');
+const selectRoutes = require("./routes/selectRoutes");
+const searchRoutes = require("./routes/searchRoutes");
+const statusRoutes = require("./routes/statusRoutes");
+const updateRoutes = require("./routes/updateRoutes");
 const initRoutes = require('./routes/initRoutes');
 const onInitRoutes = require('./routes/onInitRoutes');
 const confirmRoutes = require('./routes/confirmRoutes');
@@ -93,8 +95,10 @@ if (config.server.enableAuthentication) {
   }
 })();
 // API routes
-app.use('/api/v1/search', searchRoutes);
-app.use('/api/v1/select', selectRoutes);
+app.use("/search", searchRoutes);
+app.use("/select", selectRoutes);
+app.use("/status", statusRoutes);
+app.use("/update", updateRoutes);
 app.use('/api/v1/init', initRoutes);
 app.use('/api/v1/on_init', onInitRoutes);
 app.use('/api/v1/confirm', confirmRoutes);
@@ -138,8 +142,10 @@ const PORT = config.server.port || 3000;
 const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`ONDC Connector initialized with endpoints:`);
-  logger.info(`- /api/v1/search`);
-  logger.info(`- /api/v1/select`);
+  logger.info(`- /search`);
+  logger.info(`- /select`);
+  logger.info(`- /status`);
+  logger.info(`- /update`);
   logger.info(`- /api/v1/init`);
   logger.info(`- /api/v1/on_init`);
   logger.info(`- /api/v1/confirm`);
