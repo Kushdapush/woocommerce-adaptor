@@ -95,10 +95,10 @@ if (config.server.enableAuthentication) {
   }
 })();
 // API routes
-app.use("/search", searchRoutes);
-app.use("/select", selectRoutes);
-app.use("/status", statusRoutes);
-app.use("/update", updateRoutes);
+app.use("/api/v1/search", searchRoutes);
+app.use("/api/v1/select", selectRoutes);
+app.use("/api/v1/status", statusRoutes);
+app.use("/api/v1/update", updateRoutes);
 app.use('/api/v1/init', initRoutes);
 app.use('/api/v1/on_init', onInitRoutes);
 app.use('/api/v1/confirm', confirmRoutes);
